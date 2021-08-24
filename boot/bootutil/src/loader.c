@@ -2239,6 +2239,8 @@ print_loaded_images(struct boot_loader_state *state,
 {
     uint32_t active_slot;
 
+    return;
+
     IMAGES_ITER(BOOT_CURR_IMG(state)) {
         active_slot = slot_usage[BOOT_CURR_IMG(state)].active_slot;
 
@@ -2421,8 +2423,8 @@ boot_copy_image_to_sram(struct boot_loader_state *state, int slot,
 #ifdef CONFIG_SCORPIO_BOOTLOADER
     /* Direct copy from flash to its new location in SRAM. */
     BOOT_LOG_INF("Copying image from slot %d into LPDDR", slot);
-    BOOT_LOG_INF("  image size  = %d", img_sz);
-    BOOT_LOG_INF("  destination = 0x%llx", img_dst);
+    //BOOT_LOG_INF("  image size  = %d", img_sz);
+    //BOOT_LOG_INF("  destination = 0x%llx", img_dst);
     
     int local_offset = 0;
     while (img_sz > 0) {
@@ -2434,8 +2436,6 @@ boot_copy_image_to_sram(struct boot_loader_state *state, int slot,
         img_sz -= sz;
         local_offset += sz;
     }
-
-    BOOT_LOG_INF("  copy success");
 #endif // CONFIG_SCORPIO_BOOTLOADER
 
     flash_area_close(fap_src);
