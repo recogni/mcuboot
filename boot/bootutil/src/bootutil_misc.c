@@ -41,6 +41,8 @@
 #include "bootutil/enc_key.h"
 #endif
 
+#include <stdio.h>
+
 MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
 
 /* Currently only used by imgmgr */
@@ -300,7 +302,8 @@ boot_write_copy_done(const struct flash_area *fap)
     uint32_t off;
 
     off = boot_copy_done_off(fap);
-    BOOT_LOG_DBG("writing copy_done; fa_id=%d off=0x%lx (0x%lx)",
+    printf("%s: writing copy_done; fa_id=%d off=0x%lx, final addr 0x%lx\n",
+                __FUNCTION__,
                  fap->fa_id, (unsigned long)off,
                  (unsigned long)(fap->fa_off + off));
     return boot_write_trailer_flag(fap, off, BOOT_FLAG_SET);
