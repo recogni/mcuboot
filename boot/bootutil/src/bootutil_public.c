@@ -328,9 +328,9 @@ boot_write_magic(const struct flash_area *fap)
 
     off = boot_magic_off(fap);
 
-    printf("writing magic; fa_id=%d off=0x%lx (0x%lx)\n",
-                 fap->fa_id, (unsigned long)off,
-                 (unsigned long)(fap->fa_off + off));
+    //printf("writing magic; fa_id=%d off=0x%lx (0x%lx)\n",
+     //            fap->fa_id, (unsigned long)off,
+      //           (unsigned long)(fap->fa_off + off));
     rc = flash_area_write(fap, off, boot_img_magic, BOOT_MAGIC_SZ);
     if (rc != 0) {
         return BOOT_EFLASH;
@@ -451,17 +451,12 @@ boot_swap_type_multi(int image_index)
     for (i = 0; i < BOOT_SWAP_TABLES_COUNT; i++) {
         table = boot_swap_tables + i;
 
-        if (boot_magic_compatible_check(table->magic_primary_slot,
-                                        primary_slot.magic) &&
-            boot_magic_compatible_check(table->magic_secondary_slot,
-                                        secondary_slot.magic) &&
-            (table->image_ok_primary_slot == BOOT_FLAG_ANY   ||
-                table->image_ok_primary_slot == primary_slot.image_ok) &&
-            (table->image_ok_secondary_slot == BOOT_FLAG_ANY ||
-                table->image_ok_secondary_slot == secondary_slot.image_ok) &&
-            (table->copy_done_primary_slot == BOOT_FLAG_ANY  ||
-                table->copy_done_primary_slot == primary_slot.copy_done)) {
-            BOOT_LOG_INF("Swap type: %s",
+        if (boot_magic_compatible_check(table->magic_primary_slot, primary_slot.magic) &&
+            boot_magic_compatible_check(table->magic_secondary_slot, secondary_slot.magic) &&
+            (table->image_ok_primary_slot == BOOT_FLAG_ANY   || table->image_ok_primary_slot == primary_slot.image_ok) &&
+            (table->image_ok_secondary_slot == BOOT_FLAG_ANY || table->image_ok_secondary_slot == secondary_slot.image_ok) &&
+            (table->copy_done_primary_slot == BOOT_FLAG_ANY  || table->copy_done_primary_slot == primary_slot.copy_done)) {
+            printf("%s: Swap type: %s\n", __FUNCTION__,
                          table->swap_type == BOOT_SWAP_TYPE_TEST   ? "test"   :
                          table->swap_type == BOOT_SWAP_TYPE_PERM   ? "perm"   :
                          table->swap_type == BOOT_SWAP_TYPE_REVERT ? "revert" :
@@ -471,11 +466,18 @@ boot_swap_type_multi(int image_index)
                     table->swap_type != BOOT_SWAP_TYPE_REVERT) {
                 return BOOT_SWAP_TYPE_PANIC;
             }
+
+            printf("%s: Returning Swap type: %s\n", __FUNCTION__, 
+                         table->swap_type == BOOT_SWAP_TYPE_TEST   ? "test"   :
+                         table->swap_type == BOOT_SWAP_TYPE_PERM   ? "perm"   :
+                         table->swap_type == BOOT_SWAP_TYPE_REVERT ? "revert" :
+                         "BUG; can't happen");
             return table->swap_type;
         }
     }
 
     BOOT_LOG_INF("Swap type: none");
+    printf("%s: Returning BOOT_SWAP_TYPE_NONE\n", __FUNCTION__);
     return BOOT_SWAP_TYPE_NONE;
 }
 
@@ -524,11 +526,10 @@ boot_set_pending_multi(int image_index, int permanent)
     switch (state_secondary_slot.magic) {
     case BOOT_MAGIC_GOOD:
         /* Swap already scheduled. */
-        printf("%s: MAGIC_GOOD: Swap already scheduled!\n", __FUNCTION__);
-        break;
+        printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled! FALLTHRU!\n", __FUNCTION__);
+        //break;
 
     case BOOT_MAGIC_UNSET:
-        printf("%s: MAGIC_UNSET\n", __FUNCTION__);
         rc = boot_write_magic(fap);
 
         if (rc == 0 && permanent) {
@@ -537,8 +538,10 @@ boot_set_pending_multi(int image_index, int permanent)
 
         if (rc == 0) {
             if (permanent) {
+                printf("%s: MAGIC_UNSET: Write Secondary magic, and swap_type: perm\n", __FUNCTION__);
                 swap_type = BOOT_SWAP_TYPE_PERM;
             } else {
+                printf("%s: MAGIC_UNSET: Write Secondary magic, and swap_type: test\n", __FUNCTION__);
                 swap_type = BOOT_SWAP_TYPE_TEST;
             }
             rc = boot_write_swap_info(fap, swap_type, 0);
