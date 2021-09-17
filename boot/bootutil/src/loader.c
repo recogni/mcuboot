@@ -522,7 +522,7 @@ static char *swap_strs[] = {
 };
 struct boot_swap_state myswap[2];
 
-//#define USE_VERSION
+#define USE_VERSION
 #ifdef USE_VERSION
 static uint32_t
 find_slot_with_highest_version(struct boot_loader_state *state,
@@ -615,7 +615,9 @@ find_slot_brett(struct boot_loader_state *state,
     }
 
     /*
-     * Slot has good Magic and  swap indicates it wants to run
+     * Slot has good Magic and  swap indicates it wants to run.
+     * Wait... this still asssumes primary is default and secondary only runs when 
+     * in swap mode..
      */
     if (slot_usage[BOOT_CURR_IMG(state)].slot_available[BOOT_SECONDARY_SLOT] &&
        (myswap[BOOT_SECONDARY_SLOT].magic == BOOT_FLAG_SET) && 
@@ -692,26 +694,29 @@ boot_select_or_erase(struct boot_loader_state *state,
     rc = flash_area_open(fa_id, &fap);
     assert(rc == 0);
 
-printf("%s, active_slot %d/%s\n", __FUNCTION__, active_slot, active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+printf("%s, Active_slot is: %s\n", __FUNCTION__, active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
     active_swap_state = &(slot_usage[BOOT_CURR_IMG(state)].swap_state);
 
     memset(active_swap_state, 0, sizeof(struct boot_swap_state));
     rc = boot_read_swap_state(fap, active_swap_state);
     assert(rc == 0);
 
-    /* if (magic is bad || copy_done && !image_ok)
-     * copy_done indicates this images was booted.
+    /* if (magic is bad || (copy_done && !image_ok && swapping))
+     * We are trying new image, copy_done indicates this images was booted but it
+     * didn;t get confirmed.
      * So this image was booted but didn't get confirmed...yank it.
      * */
-    if (active_swap_state->magic != BOOT_MAGIC_GOOD ||
-        (active_swap_state->copy_done == BOOT_FLAG_SET &&
-         active_swap_state->image_ok  != BOOT_FLAG_SET)) {
+    if ((active_swap_state->magic != BOOT_MAGIC_GOOD) ||
+        ((active_swap_state->copy_done == BOOT_FLAG_SET) &&
+         (active_swap_state->image_ok  != BOOT_FLAG_SET) &&
+         ((active_swap_state->swap_type == BOOT_SWAP_TYPE_PERM) || (active_swap_state->swap_type == BOOT_SWAP_TYPE_TEST))))
+    {
         /*
          * A reboot happened without the image being confirmed at
          * runtime or its trailer is corrupted/invalid. Erase the image
          * to prevent it from being selected again on the next reboot.
          */
-        printf("%s: Erasing %s\n", __FUNCTION__, active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+        printf("*\n* %s: ERASING %s\n*\n", __FUNCTION__, active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
         rc = flash_area_erase(fap, 0, fap->fa_size);
         assert(rc == 0);
 
@@ -719,9 +724,9 @@ printf("%s, active_slot %d/%s\n", __FUNCTION__, active_slot, active_slot == BOOT
         rc = -1;
     } else {
         if (active_swap_state->copy_done != BOOT_FLAG_SET) {
-            printf("%s: Copy_done not set, write it out, %s\n", __FUNCTION__, active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+            printf("%s: Set copy_done in active slot.\n", __FUNCTION__);
             if (active_swap_state->copy_done == BOOT_FLAG_BAD) {
-                printf("The copy_done flag had an unexpected value. Its "
+                printf("FYI: The copy_done flag had an unexpected value. Its "
                              "value was neither 'set' nor 'unset', but 'bad'.\n");
             }
             /*
@@ -736,11 +741,36 @@ printf("%s, active_slot %d/%s\n", __FUNCTION__, active_slot, active_slot == BOOT
                 rc = 0;
             }
         } else {
-            printf("%s: active_swap_state->copy_done is set, nothing to do\n", __FUNCTION__);
+            printf("%s: FYI: Active slot already has copy_done set.\n", __FUNCTION__);
         }
         flash_area_close(fap);
+
+        /* XXX Need to clear copy_done on the other slot! */
+        /* Once we can do this, mcuboot_shell can detemrine which slot was booted, so when we confirm, teach it
+         * to confirm whichever slot was booted.
+         */
+        {
+            int passive_slot = BOOT_SECONDARY_SLOT - active_slot;
+            uint8_t erased_val;
+
+            if (slot_usage[BOOT_CURR_IMG(state)].slot_available[passive_slot])
+            {
+                printf("%s, Booted from %s, so clear copy_done on other slot%s\n",
+                    __FUNCTION__,
+                    active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary",
+                    passive_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+
+                fa_id = flash_area_id_from_multi_image_slot(BOOT_CURR_IMG(state), passive_slot);
+                rc = flash_area_open(fa_id, &fap);
+                erased_val = flash_area_erased_val(fap);
+                boot_write_copy_done_with_flag(fap, erased_val);
+                flash_area_close(fap);
+            } else {
+                printf("%s: Other slot (%s) doesn't exist, no copy_done to clear.\n",
+                    __FUNCTION__, passive_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+            }
+        }
     }
-printf("Exit %s\n", __FUNCTION__);
 
     return rc;
 }

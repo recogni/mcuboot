@@ -251,6 +251,58 @@ boot_read_copy_done(const struct flash_area *fap, uint8_t *copy_done)
     return boot_read_flag(fap, copy_done, boot_copy_done_off(fap));
 }
 
+#define PRIMARY_SLOT 1
+#define SECONDARY_SLOT 2
+
+static int
+boot_who_booted()
+{
+    uint8_t p_swap, s_swap;
+    int rc;
+    const struct flash_area *fap = NULL;
+
+    /* Primary */
+    rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(0), &fap);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+    boot_read_copy_done(fap, &p_swap);
+    flash_area_close(fap);
+
+    /* Secondary */
+    rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(0), &fap);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+    rc = boot_read_copy_done(fap, &s_swap);
+    if (rc != 0) {
+        goto done;
+    }
+    flash_area_close(fap);
+
+    /* Check flags */
+    if ((p_swap == BOOT_FLAG_BAD) && (s_swap == BOOT_FLAG_BAD)) {
+        printf("Nobody booted??? WTF\n");
+    }
+    if ((p_swap == BOOT_FLAG_SET) && (s_swap == BOOT_FLAG_SET)) {
+        printf("Both booted??? WTF\n");
+    }
+
+    if (p_swap == BOOT_FLAG_SET) {
+printf("who_booted returns primary\n");
+        return PRIMARY_SLOT;
+    }
+
+    if (s_swap == BOOT_FLAG_SET) {
+printf("who_booted returns secondary\n");
+        return SECONDARY_SLOT;
+    }
+
+    done:
+    printf("%s: SOmething wrong!\n", __FUNCTION__);
+    flash_area_close(fap);
+    return -1;
+}
 
 int
 boot_read_swap_state(const struct flash_area *fap,
@@ -308,8 +360,6 @@ boot_read_swap_state_by_id(int flash_area_id, struct boot_swap_state *state)
     const struct flash_area *fap;
     int rc;
 
-    //flash_area_id--;
-//printf("%s: fash_area_id  %d\n", __FUNCTION__, flash_area_id);
     rc = flash_area_open(flash_area_id, &fap);
     if (rc != 0) {
         return BOOT_EFLASH;
@@ -450,6 +500,7 @@ boot_swap_type_multi(int image_index)
 
     for (i = 0; i < BOOT_SWAP_TABLES_COUNT; i++) {
         table = boot_swap_tables + i;
+        printf("%s: table %ld\n", __FUNCTION__, i);
 
         if (boot_magic_compatible_check(table->magic_primary_slot, primary_slot.magic) &&
             boot_magic_compatible_check(table->magic_secondary_slot, secondary_slot.magic) &&
@@ -526,8 +577,9 @@ boot_set_pending_multi(int image_index, int permanent)
     switch (state_secondary_slot.magic) {
     case BOOT_MAGIC_GOOD:
         /* Swap already scheduled. */
-        printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled! FALLTHRU!\n", __FUNCTION__);
-        //break;
+        //printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled! FALLTHRU!\n", __FUNCTION__);
+        printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled! DO NOT FALLTHRU!\n", __FUNCTION__);
+        break;
 
     case BOOT_MAGIC_UNSET:
         rc = boot_write_magic(fap);
@@ -586,6 +638,150 @@ int
 boot_set_pending(int permanent)
 {
     return boot_set_pending_multi(0, permanent);
+}
+
+int
+recogni_boot_set_pending_multi(int image_index, int permanent)
+{
+    const struct flash_area *fap;
+    struct boot_swap_state state_slot;
+    uint8_t swap_type;
+    int rc;
+
+    int slot =  boot_who_booted();
+    if (slot != PRIMARY_SLOT && slot != SECONDARY_SLOT)
+    {
+        printf("%s: Invalid slot\n", __FUNCTION__);
+        return BOOT_EBADVECT;
+    }
+
+    if (slot == PRIMARY_SLOT) {
+        rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index), &fap);
+    } else {
+        rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_index), &fap);
+    }
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+
+    rc = boot_read_swap_state(fap, &state_slot);
+    if (rc != 0) {
+        goto done;
+    }
+
+    switch (state_slot.magic) {
+    case BOOT_MAGIC_GOOD:
+        /* Swap already scheduled. */
+        //printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled! FALLTHRU!\n", __FUNCTION__);
+        printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled! DO NOT FALLTHRU!\n", __FUNCTION__);
+        break;
+
+    case BOOT_MAGIC_UNSET:
+        rc = boot_write_magic(fap);
+
+        if (rc == 0 && permanent) {
+            rc = boot_write_image_ok(fap);
+        }
+
+        if (rc == 0) {
+            if (permanent) {
+                printf("%s: MAGIC_UNSET: Write Secondary magic, and swap_type: perm\n", __FUNCTION__);
+                swap_type = BOOT_SWAP_TYPE_PERM;
+            } else {
+                printf("%s: MAGIC_UNSET: Write Secondary magic, and swap_type: test\n", __FUNCTION__);
+                swap_type = BOOT_SWAP_TYPE_TEST;
+            }
+            rc = boot_write_swap_info(fap, swap_type, 0);
+        }
+
+        break;
+
+    case BOOT_MAGIC_BAD:
+        /* The image slot is corrupt.  There is no way to recover, so erase the
+         * slot to allow future upgrades.
+         */
+        printf("%s: MAGIC_BAD: The image slot is corrupt.\n", __FUNCTION__);
+        flash_area_erase(fap, 0, fap->fa_size);
+        rc = BOOT_EBADIMAGE;
+        break;
+
+    default:
+        printf("%s: MAGIC_UNKNOWN: The image slot is corrupt.\n", __FUNCTION__);
+        assert(0);
+        rc = BOOT_EBADIMAGE;
+    }
+
+done:
+    flash_area_close(fap);
+    return rc;
+}
+
+int
+recogni_boot_set_pending(int permanent)
+{
+    return recogni_boot_set_pending_multi(0, permanent);
+}
+
+
+/* Set whoever booted! */
+int
+recogni_boot_set_confirmed_multi(int image_index)
+{
+    const struct flash_area *fap = NULL;
+    struct boot_swap_state state_slot;
+    int rc;
+    
+    int slot =  boot_who_booted();
+    if (slot != PRIMARY_SLOT && slot != SECONDARY_SLOT)
+    {
+        printf("%s: Invalid slot\n", __FUNCTION__);
+        return BOOT_EBADVECT;
+    }
+
+    if (slot == PRIMARY_SLOT) {
+        rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index), &fap);
+    } else {
+        rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_index), &fap);
+    }
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+
+    rc = boot_read_swap_state(fap, &state_slot);
+    if (rc != 0) {
+        goto done;
+    }
+
+    switch (state_slot.magic) {
+    case BOOT_MAGIC_GOOD:
+        /* Confirm needed; proceed. */
+        break;
+
+    case BOOT_MAGIC_UNSET:
+        /* Already confirmed. */
+        goto done;
+
+    case BOOT_MAGIC_BAD:
+        /* Unexpected state. */
+        rc = BOOT_EBADVECT;
+        goto done;
+    }
+
+    /* Intentionally do not check copy_done flag
+     * so can confirm a padded image which was programed using a programing
+     * interface.
+     */
+
+    if (state_slot.image_ok != BOOT_FLAG_UNSET) {
+        /* Already confirmed. */
+        goto done;
+    }
+
+    rc = boot_write_image_ok(fap);
+
+done:
+    flash_area_close(fap);
+    return rc;
 }
 
 /**
@@ -658,4 +854,10 @@ int
 boot_set_confirmed(void)
 {
     return boot_set_confirmed_multi(0);
+}
+
+int
+recogni_boot_set_confirmed(void)
+{
+    return recogni_boot_set_confirmed_multi(0);
 }

@@ -161,6 +161,7 @@ int boot_swap_type(void);
  * @return                  0 on success; nonzero on failure.
  */
 int boot_set_pending_multi(int image_index, int permanent);
+int recogni_boot_set_pending_multi(int image_index, int permanent);
 
 /**
  * Marks the image with index 0 in the secondary slot as pending. On the next
@@ -176,6 +177,7 @@ int boot_set_pending_multi(int image_index, int permanent);
  * @return                  0 on success; nonzero on failure.
  */
 int boot_set_pending(int permanent);
+int recogni_boot_set_pending(int permanent);
 
 /**
  * Marks the image with the given index in the primary slot as confirmed.  The
@@ -187,6 +189,7 @@ int boot_set_pending(int permanent);
  * @return                  0 on success; nonzero on failure.
  */
 int boot_set_confirmed_multi(int image_index);
+int recogni_boot_set_confirmed_multi(int image_index);
 
 /**
  * Marks the image with index 0 in the primary slot as confirmed.  The system
@@ -197,6 +200,7 @@ int boot_set_confirmed_multi(int image_index);
  * @return                  0 on success; nonzero on failure.
  */
 int boot_set_confirmed(void);
+int recogni_boot_set_confirmed(void);
 
 /**
  * @brief Get offset of the swap info field in the image trailer.
