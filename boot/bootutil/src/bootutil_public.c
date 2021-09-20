@@ -91,7 +91,7 @@ struct boot_swap_table {
  */
 static const struct boot_swap_table boot_swap_tables[] = {
     {
-        .magic_primary_slot =       BOOT_MAGIC_ANY,
+        .magic_primary_slot =       BOOT_MAGIC_GOOD, //ANY,
         .magic_secondary_slot =     BOOT_MAGIC_GOOD,
         .image_ok_primary_slot =    BOOT_FLAG_ANY,
         .image_ok_secondary_slot =  BOOT_FLAG_UNSET,
@@ -99,7 +99,7 @@ static const struct boot_swap_table boot_swap_tables[] = {
         .swap_type =                BOOT_SWAP_TYPE_TEST,
     },
     {
-        .magic_primary_slot =       BOOT_MAGIC_ANY,
+        .magic_primary_slot =       BOOT_MAGIC_GOOD, //ANY,
         .magic_secondary_slot =     BOOT_MAGIC_GOOD,
         .image_ok_primary_slot =    BOOT_FLAG_ANY,
         .image_ok_secondary_slot =  BOOT_FLAG_SET,
@@ -108,7 +108,7 @@ static const struct boot_swap_table boot_swap_tables[] = {
     },
     {
         .magic_primary_slot =       BOOT_MAGIC_GOOD,
-        .magic_secondary_slot =     BOOT_MAGIC_UNSET,
+        .magic_secondary_slot =     BOOT_MAGIC_GOOD, //UNSET,
         .image_ok_primary_slot =    BOOT_FLAG_UNSET,
         .image_ok_secondary_slot =  BOOT_FLAG_ANY,
         .copy_done_primary_slot =   BOOT_FLAG_SET,
