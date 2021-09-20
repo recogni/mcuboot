@@ -550,7 +550,7 @@ dump_swap(int area)
         printf("%s: Couldn't read area %d!\n", __FUNCTION__, area);
 }
 
-//#define USE_VERSION
+#define USE_VERSION
 #ifdef USE_VERSION
 static uint32_t
 find_slot_with_highest_version(struct boot_loader_state *state,
@@ -723,6 +723,7 @@ boot_select_or_erase(struct boot_loader_state *state,
     int rc;
     uint32_t active_slot;
     struct boot_swap_state* active_swap_state;
+    bool other_slot_present = 0;
 
     active_slot = slot_usage[BOOT_CURR_IMG(state)].active_slot;
 
@@ -742,22 +743,61 @@ printf("%s, Active_slot is: %s\n", __FUNCTION__, active_slot == BOOT_PRIMARY_SLO
      * didn;t get confirmed.
      * So this image was booted but didn't get confirmed...yank it.
      * */
+
+
+
+
+         //((active_swap_state->swap_type == BOOT_SWAP_TYPE_PERM) || (active_swap_state->swap_type == BOOT_SWAP_TYPE_TEST))
     if ((active_swap_state->magic != BOOT_MAGIC_GOOD) ||
         ((active_swap_state->copy_done == BOOT_FLAG_SET) &&
-         (active_swap_state->image_ok  != BOOT_FLAG_SET) &&
-         ((active_swap_state->swap_type == BOOT_SWAP_TYPE_PERM) || (active_swap_state->swap_type == BOOT_SWAP_TYPE_TEST))))
+         (active_swap_state->image_ok  != BOOT_FLAG_SET) 
+         ))
     {
         /*
          * A reboot happened without the image being confirmed at
          * runtime or its trailer is corrupted/invalid. Erase the image
          * to prevent it from being selected again on the next reboot.
+         */ 
+#ifdef DONT
+        /* Don't erase only image !! */
+        /* Don't do this becasue:
+         *  - You don't confirm primary and only image.  It boots fine over and over, its not removed cuz its the only one..
+         *  - Upload new candidate and reboot. 
+         *  - Now there is another slot, original can be erased and now only left with unconfirmed candidate.
          */
+        {
+            const struct flash_area *fap_other;
+            struct boot_swap_state other_swap_state;
+            int fa_id_other;
+
+            fa_id_other= flash_area_id_from_multi_image_slot(BOOT_CURR_IMG(state), !active_slot);
+            rc = flash_area_open(fa_id_other, &fap_other);
+            assert(rc == 0);
+            memset(&other_swap_state, 0, sizeof(struct boot_swap_state));
+            rc = boot_read_swap_state(fap_other, &other_swap_state);
+            assert(rc == 0);
+            flash_area_close(fap_other);
+            if (other_swap_state.magic == BOOT_MAGIC_GOOD) {
+                other_slot_present = 1;
+            }
+        }
+
+#else
+        other_slot_present = 1;
+#endif
         printf("*\n* %s: ERASING %s\n*\n", __FUNCTION__, active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
-        rc = flash_area_erase(fap, 0, fap->fa_size);
-        assert(rc == 0);
+        if (other_slot_present) 
+        {
+            rc = flash_area_erase(fap, 0, fap->fa_size);
+            assert(rc == 0);
+            rc = -1;
+        } else {
+            printf("Actually, do NOT erase only image\n");
+            rc = 0;
+        }
 
         flash_area_close(fap);
-        rc = -1;
+
     } else {
         if (active_swap_state->copy_done != BOOT_FLAG_SET) {
             //printf("%s: Set copy_done in active slot.\n", __FUNCTION__);
