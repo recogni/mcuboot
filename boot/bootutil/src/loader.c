@@ -522,7 +522,35 @@ static char *swap_strs[] = {
 };
 struct boot_swap_state myswap[2];
 
-#define USE_VERSION
+static char *area_strs[] = {
+    "BOOT_AREA!!",
+    "PRIMARY  ",
+    "SECONDARY",
+    "GARBAGE  ",
+};
+#define FLASH_AREA_PRIMARY      1
+#define FLASH_AREA_SECONDARY    2
+
+static void
+dump_swap(int area)
+{
+    struct boot_swap_state state;
+    int rc;
+    
+    /* id == indicates which partition in dts file */
+    /* Assumes single IMAGE ... e.g. single image with primary and secondary slots */
+
+    area &= 0x3;
+
+    rc = boot_read_swap_state_by_id(area, &state);
+    if (!rc)
+        printf("%s  : magic: %s, swap_type: %s, copy_done: %s, image_ok: %s\n", area_strs[area],
+            boot_strs[state.magic], swap_strs[state.swap_type], boot_strs[state.copy_done], boot_strs[state.image_ok]);
+    else
+        printf("%s: Couldn't read area %d!\n", __FUNCTION__, area);
+}
+
+//#define USE_VERSION
 #ifdef USE_VERSION
 static uint32_t
 find_slot_with_highest_version(struct boot_loader_state *state,
@@ -532,6 +560,7 @@ find_slot_with_highest_version(struct boot_loader_state *state,
     uint32_t candidate_slot = NO_ACTIVE_SLOT;
     int rc;
 
+    printf("Using highest-version algorithm to choose boot slot\n");
     for (slot = 0; slot < BOOT_NUM_SLOTS; slot++) {
         if (slot_usage[BOOT_CURR_IMG(state)].slot_available[slot]) {
             if (candidate_slot == NO_ACTIVE_SLOT) {
@@ -557,12 +586,13 @@ find_slot_with_highest_version(struct boot_loader_state *state,
 }
 #else /* Below is !USE_VERSION */
 static uint32_t
-find_slot_brett(struct boot_loader_state *state,
+find_slot_scorpio(struct boot_loader_state *state,
                               struct slot_usage_t slot_usage[])
 {
     int myslot;
     int score[2];
 
+    printf("Using SCORPIO algorithm to choose boot slot\n");
     /* 
      * get swap states for each slot
      */
@@ -591,11 +621,11 @@ find_slot_brett(struct boot_loader_state *state,
     {
         if (slot_usage[BOOT_CURR_IMG(state)].slot_available[myslot] == true)
         {
-            printf("%s: Slot %d: magic: %s, swap_type %s, copy_done: %s, image_ok: %s\n", __FUNCTION__, myslot,
-                boot_strs[myswap[myslot].magic],
-                swap_strs[myswap[myslot].swap_type],
-                boot_strs[myswap[myslot].copy_done],
-                boot_strs[myswap[myslot].image_ok]);
+            //printf("%s: Slot %d: magic: %s, swap_type %s, copy_done: %s, image_ok: %s\n", __FUNCTION__, myslot,
+            //    boot_strs[myswap[myslot].magic],
+            //    swap_strs[myswap[myslot].swap_type],
+            //    boot_strs[myswap[myslot].copy_done],
+            //    boot_strs[myswap[myslot].image_ok]);
 
             if (myswap[myslot].magic == BOOT_FLAG_SET) {
                 score[myslot]++;
@@ -611,30 +641,36 @@ find_slot_brett(struct boot_loader_state *state,
      * No slot is available
      */
     if (!score[0] && !score[1]) {
+        printf("%s: Scorpio algo: No Slots available!!\n", __FUNCTION__);
         return NO_ACTIVE_SLOT;
     }
 
     /*
      * Slot has good Magic and  swap indicates it wants to run.
-     * Wait... this still asssumes primary is default and secondary only runs when 
-     * in swap mode..
+     * #define BOOT_PRIMARY_SLOT               0
+     * #define BOOT_SECONDARY_SLOT             1
+     *
+     * Try secondary first...
      */
-    if (slot_usage[BOOT_CURR_IMG(state)].slot_available[BOOT_SECONDARY_SLOT] &&
-       (myswap[BOOT_SECONDARY_SLOT].magic == BOOT_FLAG_SET) && 
-       ((myswap[BOOT_SECONDARY_SLOT].swap_type == BOOT_SWAP_TYPE_PERM) || (myswap[BOOT_SECONDARY_SLOT].swap_type == BOOT_SWAP_TYPE_TEST)))
+    for (myslot = BOOT_SECONDARY_SLOT; myslot >= BOOT_PRIMARY_SLOT; myslot--)
     {
-        printf("%s: Secondary: Magic is good and swap is set, choose SECONDARY\n", __FUNCTION__);
-        return(BOOT_SECONDARY_SLOT);
+        if (slot_usage[BOOT_CURR_IMG(state)].slot_available[myslot] &&
+           (myswap[myslot].magic == BOOT_FLAG_SET) && 
+           ((myswap[myslot].swap_type == BOOT_SWAP_TYPE_PERM) || (myswap[myslot].swap_type == BOOT_SWAP_TYPE_TEST)))
+        {
+            printf("%s: Scorpio algo: SWAP Requested: Selecting %s slot to boot\n", __FUNCTION__, myslot == BOOT_SECONDARY_SLOT ? "SECONDARY" : "PRIMARY");
+            return(myslot);
+        }
     }
 
-    //This will let u revert copy_done and swap_type
+    //Can revert copy_done and swap_type with:
     //boot_write_swap_info(const struct flash_area *fap, uint8_t swap_type, uint8_t image_num)
     //also boot_write_trailer()
-
 
     /*
      * Still here? Return highest score
      */
+    printf("%s: Scorpio algo: High Score: Selecting %s slot to boot\n", __FUNCTION__, myslot == BOOT_SECONDARY_SLOT ? "SECONDARY" : "PRIMARY");
     return score[0] > score[1] ? 0 : 1; 
 
 }
@@ -724,7 +760,7 @@ printf("%s, Active_slot is: %s\n", __FUNCTION__, active_slot == BOOT_PRIMARY_SLO
         rc = -1;
     } else {
         if (active_swap_state->copy_done != BOOT_FLAG_SET) {
-            printf("%s: Set copy_done in active slot.\n", __FUNCTION__);
+            //printf("%s: Set copy_done in active slot.\n", __FUNCTION__);
             if (active_swap_state->copy_done == BOOT_FLAG_BAD) {
                 printf("FYI: The copy_done flag had an unexpected value. Its "
                              "value was neither 'set' nor 'unset', but 'bad'.\n");
@@ -868,7 +904,7 @@ boot_copy_image_to_sram(struct boot_loader_state *state, int slot,
 
 #ifdef CONFIG_SCORPIO_BOOTLOADER
     /* Direct copy from flash to its new location in SRAM. */
-    BOOT_LOG_INF("Copying image from %s slot (%d) into LPDDR", slot ? "Secondary" : "Primary", slot);
+    BOOT_LOG_INF("Copying image from %s slot into LPDDR", slot ? "SECONDARY" : "PRIMARY");
     //BOOT_LOG_INF("  image size  = %d", img_sz);
     //BOOT_LOG_INF("  destination = 0x%llx", img_dst);
     
@@ -1020,6 +1056,9 @@ boot_load_and_validate_images(struct boot_loader_state *state,
     int rc;
     fih_int fih_rc;
 
+    dump_swap(FLASH_AREA_PRIMARY);
+    dump_swap(FLASH_AREA_SECONDARY);
+
     /* Go over all the images and try to load one */
     IMAGES_ITER(BOOT_CURR_IMG(state)) {
         /* All slots tried until a valid image found. Breaking from this loop
@@ -1045,7 +1084,7 @@ boot_load_and_validate_images(struct boot_loader_state *state,
                                                          slot_usage);
 #else
             /* choose based on flags */
-            active_slot = find_slot_brett(state, slot_usage);
+            active_slot = find_slot_scorpio(state, slot_usage);
 
 #endif
 
@@ -1081,6 +1120,13 @@ boot_load_and_validate_images(struct boot_loader_state *state,
 //#endif /* MCUBOOT_DIRECT_XIP_REVERT */
 
 
+#ifndef LATER
+            for (int myslot = 0; myslot < 2; myslot++) {
+                if (slot_usage[BOOT_CURR_IMG(state)].slot_available[myslot] == true) {
+                    dump_swap(myslot + 1);
+                }
+            }
+#else
             /*
              * Just dumping swap states...READ ONLY
              */
@@ -1108,6 +1154,7 @@ boot_load_and_validate_images(struct boot_loader_state *state,
                     printf("%s: Slot %d: NOT VALID\n", __FUNCTION__, myslot);
                  }
             }
+#endif
                 
 
             /* Image is first loaded to RAM and authenticated there in order to
