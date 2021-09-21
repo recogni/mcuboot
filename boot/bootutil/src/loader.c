@@ -349,6 +349,13 @@ boot_version_cmp(const struct image_version *ver1,
         return -1;
     }
 
+    /* The revision numbers are equal, continue comparison. */
+    if (ver1->iv_build_num > ver2->iv_build_num) {
+        return 1;
+    }
+    if (ver1->iv_build_num < ver2->iv_build_num) {
+        return -1;
+    }
     return 0;
 }
 #endif
@@ -569,8 +576,12 @@ find_slot_with_highest_version(struct boot_loader_state *state,
         }
     }
 
-    printf("%s: Chose highest version in %s slot\n", __FUNCTION__,
-          (candidate_slot == BOOT_PRIMARY_SLOT) ? "PRIMARY" : "SECONDARY");
+    BOOT_LOG_INF("Highest version (%u.%u.%u+%u) is in %s slot",
+        boot_img_hdr(state, candidate_slot)->ih_ver.iv_major,
+        boot_img_hdr(state, candidate_slot)->ih_ver.iv_minor,
+        boot_img_hdr(state, candidate_slot)->ih_ver.iv_revision,
+        boot_img_hdr(state, candidate_slot)->ih_ver.iv_build_num,
+        (candidate_slot == BOOT_PRIMARY_SLOT) ? "PRIMARY" : "SECONDARY");
 
     return candidate_slot;
 }
@@ -611,11 +622,14 @@ find_slot_scorpio(struct boot_loader_state *state,
     {
         if (slot_usage[BOOT_CURR_IMG(state)].slot_available[myslot] == true)
         {
-            //printf("%s: Slot %d: magic: %s, swap_type %s, copy_done: %s, image_ok: %s\n", __FUNCTION__, myslot,
-            //    boot_strs[myswap[myslot].magic],
-            //    swap_strs[myswap[myslot].swap_type],
-            //    boot_strs[myswap[myslot].copy_done],
-            //    boot_strs[myswap[myslot].image_ok]);
+            if (verbose)
+            {
+                printf("%s: Slot %d: magic: %s, swap_type %s, copy_done: %s, image_ok: %s\n", __FUNCTION__, myslot,
+                    boot_strs[myswap[myslot].magic],
+                    swap_strs[myswap[myslot].swap_type],
+                    boot_strs[myswap[myslot].copy_done],
+                    boot_strs[myswap[myslot].image_ok]);
+            }
 
             if (myswap[myslot].magic == BOOT_FLAG_SET) {
                 score[myslot]++;
@@ -652,10 +666,6 @@ find_slot_scorpio(struct boot_loader_state *state,
             return(myslot);
         }
     }
-
-    //Can revert copy_done and swap_type with:
-    //boot_write_swap_info(const struct flash_area *fap, uint8_t swap_type, uint8_t image_num)
-    //also boot_write_trailer()
 
     /*
      * Still here? Return highest score
@@ -741,7 +751,8 @@ boot_select_or_erase(struct boot_loader_state *state,
          * runtime or its trailer is corrupted/invalid. Erase the image
          * to prevent it from being selected again on the next reboot.
          */ 
-        printf("*\n* %s: ERASING %s\n*\n", __FUNCTION__, active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+        printf("*\n* %s Slot booted with no confirmation or is corrupt.\n", active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+        printf("* ERASING %s\n*\n", active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
             rc = flash_area_erase(fap, 0, fap->fa_size);
             assert(rc == 0);
             rc = -1;
@@ -1089,8 +1100,12 @@ boot_load_and_validate_images(struct boot_loader_state *state,
              * Active slot is now chosen
              */
             slot_usage[BOOT_CURR_IMG(state)].active_slot = active_slot;
-            printf("%s: Set Active slot %d/%s\n",
-                __FUNCTION__, active_slot, active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+
+            if (verbose)
+            {
+                printf("%s: Set Active slot %d/%s\n",
+                    __FUNCTION__, active_slot, active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+            }
 
             /* 
              * Checks whether the active slot was previously selected to run. 
