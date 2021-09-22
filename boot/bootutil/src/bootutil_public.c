@@ -405,7 +405,7 @@ boot_write_trailer(const struct flash_area *fap, uint32_t off,
 
     if (align)
     {
-        memset(&buf[inlen], erased_val, align - inlen);   //<<----  align == 0, Crashes!!
+        memset(&buf[inlen], erased_val, align - inlen);
         rc = flash_area_write(fap, off, buf, align);
     } else {
         printf("Align == 0, skip write\n");
@@ -499,7 +499,7 @@ boot_swap_type_multi(int image_index)
             (table->image_ok_secondary_slot == BOOT_FLAG_ANY || table->image_ok_secondary_slot == secondary_slot.image_ok) &&
             (table->copy_done_primary_slot == BOOT_FLAG_ANY  || table->copy_done_primary_slot == primary_slot.copy_done)) {
             if (verbose) 
-            printf("%s: Swap type: %s\n", __FUNCTION__,
+                printf("%s: Swap type: %s\n", __FUNCTION__,
                          table->swap_type == BOOT_SWAP_TYPE_TEST   ? "test"   :
                          table->swap_type == BOOT_SWAP_TYPE_PERM   ? "perm"   :
                          table->swap_type == BOOT_SWAP_TYPE_REVERT ? "revert" :
@@ -511,7 +511,7 @@ boot_swap_type_multi(int image_index)
             }
 
             if (verbose) 
-            printf("%s: Returning Swap type: %s\n", __FUNCTION__, 
+                printf("%s: Returning Swap type: %s\n", __FUNCTION__, 
                          table->swap_type == BOOT_SWAP_TYPE_TEST   ? "test"   :
                          table->swap_type == BOOT_SWAP_TYPE_PERM   ? "perm"   :
                          table->swap_type == BOOT_SWAP_TYPE_REVERT ? "revert" :
@@ -521,8 +521,6 @@ boot_swap_type_multi(int image_index)
     }
 
     BOOT_LOG_INF("Swap type: none");
-    if (verbose) 
-    printf("%s: Returning BOOT_SWAP_TYPE_NONE\n", __FUNCTION__);
     return BOOT_SWAP_TYPE_NONE;
 }
 
