@@ -537,7 +537,7 @@ boot_swap_type(void)
 }
 
 /**
- * Marks the image with the given index in the secondary slot as pending. On the
+ * Marks the image with the given index in the slot that booted as pending. On the
  * next reboot, the system will perform a one-time boot of the the secondary
  * slot image.
  *
@@ -554,24 +554,35 @@ int
 boot_set_pending_multi(int image_index, int permanent)
 {
     const struct flash_area *fap;
-    struct boot_swap_state state_secondary_slot;
+    struct boot_swap_state state_slot;
     uint8_t swap_type;
     int rc;
 
-    rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_index), &fap);
+    int slot =  boot_who_booted();
+    if (slot != PRIMARY_SLOT && slot != SECONDARY_SLOT)
+    {
+        printf("%s: Invalid slot\n", __FUNCTION__);
+        return BOOT_EBADVECT;
+    }
+
+    if (slot == PRIMARY_SLOT) {
+        rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index), &fap);
+    } else {
+        rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_index), &fap);
+    }
     if (rc != 0) {
         return BOOT_EFLASH;
     }
 
-    rc = boot_read_swap_state(fap, &state_secondary_slot);
+    rc = boot_read_swap_state(fap, &state_slot);
     if (rc != 0) {
         goto done;
     }
 
-    switch (state_secondary_slot.magic) {
+    switch (state_slot.magic) {
     case BOOT_MAGIC_GOOD:
         /* Swap already scheduled. */
-        printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled! DO NOT FALLTHRU!\n", __FUNCTION__);
+        printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled!\n", __FUNCTION__);
         break;
 
     case BOOT_MAGIC_UNSET:
@@ -615,7 +626,7 @@ done:
 }
 
 /**
- * Marks the image with index 0 in the secondary slot as pending. On the next
+ * Marks the image with index 0 in the slot that booted as pending. On the next
  * reboot, the system will perform a one-time boot of the the secondary slot
  * image. Note that this API is kept for compatibility. The
  * boot_set_pending_multi() API is recommended.
@@ -633,92 +644,10 @@ boot_set_pending(int permanent)
     return boot_set_pending_multi(0, permanent);
 }
 
-int
-recogni_boot_set_pending_multi(int image_index, int permanent)
-{
-    const struct flash_area *fap;
-    struct boot_swap_state state_slot;
-    uint8_t swap_type;
-    int rc;
-
-    int slot =  boot_who_booted();
-    if (slot != PRIMARY_SLOT && slot != SECONDARY_SLOT)
-    {
-        printf("%s: Invalid slot\n", __FUNCTION__);
-        return BOOT_EBADVECT;
-    }
-
-    if (slot == PRIMARY_SLOT) {
-        rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index), &fap);
-    } else {
-        rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_index), &fap);
-    }
-    if (rc != 0) {
-        return BOOT_EFLASH;
-    }
-
-    rc = boot_read_swap_state(fap, &state_slot);
-    if (rc != 0) {
-        goto done;
-    }
-
-    switch (state_slot.magic) {
-    case BOOT_MAGIC_GOOD:
-        /* Swap already scheduled. */
-        //printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled! FALLTHRU!\n", __FUNCTION__);
-        printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled! DO NOT FALLTHRU!\n", __FUNCTION__);
-        break;
-
-    case BOOT_MAGIC_UNSET:
-        rc = boot_write_magic(fap);
-
-        if (rc == 0 && permanent) {
-            rc = boot_write_image_ok(fap);
-        }
-
-        if (rc == 0) {
-            if (permanent) {
-                printf("%s: MAGIC_UNSET: Write Secondary magic, and swap_type: perm\n", __FUNCTION__);
-                swap_type = BOOT_SWAP_TYPE_PERM;
-            } else {
-                printf("%s: MAGIC_UNSET: Write Secondary magic, and swap_type: test\n", __FUNCTION__);
-                swap_type = BOOT_SWAP_TYPE_TEST;
-            }
-            rc = boot_write_swap_info(fap, swap_type, 0);
-        }
-
-        break;
-
-    case BOOT_MAGIC_BAD:
-        /* The image slot is corrupt.  There is no way to recover, so erase the
-         * slot to allow future upgrades.
-         */
-        printf("%s: MAGIC_BAD: The image slot is corrupt.\n", __FUNCTION__);
-        flash_area_erase(fap, 0, fap->fa_size);
-        rc = BOOT_EBADIMAGE;
-        break;
-
-    default:
-        printf("%s: MAGIC_UNKNOWN: The image slot is corrupt.\n", __FUNCTION__);
-        assert(0);
-        rc = BOOT_EBADIMAGE;
-    }
-
-done:
-    flash_area_close(fap);
-    return rc;
-}
-
-int
-recogni_boot_set_pending(int permanent)
-{
-    return recogni_boot_set_pending_multi(0, permanent);
-}
-
 
 /* Set whoever booted or fallback to whichever has good magic  */
 int
-recogni_boot_set_confirmed_multi(int image_index)
+boot_set_confirmed_multi(int image_index)
 {
     const struct flash_area *fap = NULL;
     struct boot_swap_state state_slot;
@@ -800,65 +729,7 @@ done:
 }
 
 /**
- * Marks the image with the given index in the primary slot as confirmed.  The
- * system will continue booting into the image in the primary slot until told to
- * boot from a different slot.
- *
- * @param image_index       Image pair index.
- *
- * @return                  0 on success; nonzero on failure.
- */
-int
-boot_set_confirmed_multi(int image_index)
-{
-    const struct flash_area *fap = NULL;
-    struct boot_swap_state state_primary_slot;
-    int rc;
-
-    rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index), &fap);
-    if (rc != 0) {
-        return BOOT_EFLASH;
-    }
-
-    rc = boot_read_swap_state(fap, &state_primary_slot);
-    if (rc != 0) {
-        goto done;
-    }
-
-    switch (state_primary_slot.magic) {
-    case BOOT_MAGIC_GOOD:
-        /* Confirm needed; proceed. */
-        break;
-
-    case BOOT_MAGIC_UNSET:
-        /* Already confirmed. */
-        goto done;
-
-    case BOOT_MAGIC_BAD:
-        /* Unexpected state. */
-        rc = BOOT_EBADVECT;
-        goto done;
-    }
-
-    /* Intentionally do not check copy_done flag
-     * so can confirm a padded image which was programed using a programing
-     * interface.
-     */
-
-    if (state_primary_slot.image_ok != BOOT_FLAG_UNSET) {
-        /* Already confirmed. */
-        goto done;
-    }
-
-    rc = boot_write_image_ok(fap);
-
-done:
-    flash_area_close(fap);
-    return rc;
-}
-
-/**
- * Marks the image with index 0 in the primary slot as confirmed.  The system
+ * Marks the image with index 0 in the slot that booted as confirmed.  The system
  * will continue booting into the image in the primary slot until told to boot
  * from a different slot.  Note that this API is kept for compatibility. The
  * boot_set_confirmed_multi() API is recommended.
@@ -869,10 +740,4 @@ int
 boot_set_confirmed(void)
 {
     return boot_set_confirmed_multi(0);
-}
-
-int
-recogni_boot_set_confirmed(void)
-{
-    return recogni_boot_set_confirmed_multi(0);
 }
