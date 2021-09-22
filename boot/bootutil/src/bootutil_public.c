@@ -50,6 +50,10 @@
 #include "bootutil/enc_key_public.h"
 #endif
 
+#include <stdio.h>
+
+static int verbose = 0;
+
 #ifdef CONFIG_MCUBOOT
 MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
 #else
@@ -89,7 +93,7 @@ struct boot_swap_table {
  */
 static const struct boot_swap_table boot_swap_tables[] = {
     {
-        .magic_primary_slot =       BOOT_MAGIC_ANY,
+        .magic_primary_slot =       BOOT_MAGIC_GOOD, //ANY,
         .magic_secondary_slot =     BOOT_MAGIC_GOOD,
         .image_ok_primary_slot =    BOOT_FLAG_ANY,
         .image_ok_secondary_slot =  BOOT_FLAG_UNSET,
@@ -97,7 +101,7 @@ static const struct boot_swap_table boot_swap_tables[] = {
         .swap_type =                BOOT_SWAP_TYPE_TEST,
     },
     {
-        .magic_primary_slot =       BOOT_MAGIC_ANY,
+        .magic_primary_slot =       BOOT_MAGIC_GOOD, //ANY,
         .magic_secondary_slot =     BOOT_MAGIC_GOOD,
         .image_ok_primary_slot =    BOOT_FLAG_ANY,
         .image_ok_secondary_slot =  BOOT_FLAG_SET,
@@ -106,7 +110,7 @@ static const struct boot_swap_table boot_swap_tables[] = {
     },
     {
         .magic_primary_slot =       BOOT_MAGIC_GOOD,
-        .magic_secondary_slot =     BOOT_MAGIC_UNSET,
+        .magic_secondary_slot =     BOOT_MAGIC_GOOD, //UNSET,
         .image_ok_primary_slot =    BOOT_FLAG_UNSET,
         .image_ok_secondary_slot =  BOOT_FLAG_ANY,
         .copy_done_primary_slot =   BOOT_FLAG_SET,
@@ -249,6 +253,55 @@ boot_read_copy_done(const struct flash_area *fap, uint8_t *copy_done)
     return boot_read_flag(fap, copy_done, boot_copy_done_off(fap));
 }
 
+#define PRIMARY_SLOT 1
+#define SECONDARY_SLOT 2
+
+static int
+boot_who_booted()
+{
+    uint8_t p_swap, s_swap;
+    int rc;
+    const struct flash_area *fap = NULL;
+
+    /* Primary */
+    rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(0), &fap);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+    boot_read_copy_done(fap, &p_swap);
+    flash_area_close(fap);
+
+    /* Secondary */
+    rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(0), &fap);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+    rc = boot_read_copy_done(fap, &s_swap);
+    if (rc != 0) {
+        goto done;
+    }
+    flash_area_close(fap);
+
+    /* Check flags */
+    if ((p_swap == BOOT_FLAG_BAD) && (s_swap == BOOT_FLAG_BAD)) {
+        printf("Nobody booted??? WTF\n");
+    }
+    if ((p_swap == BOOT_FLAG_SET) && (s_swap == BOOT_FLAG_SET)) {
+        printf("Both booted??? WTF\n");
+    }
+
+    if (p_swap == BOOT_FLAG_SET) {
+        return PRIMARY_SLOT;
+    }
+
+    if (s_swap == BOOT_FLAG_SET) {
+        return SECONDARY_SLOT;
+    }
+
+    done:
+    flash_area_close(fap);
+    return -1;
+}
 
 int
 boot_read_swap_state(const struct flash_area *fap,
@@ -264,6 +317,7 @@ boot_read_swap_state(const struct flash_area *fap,
     if (rc < 0) {
         return BOOT_EFLASH;
     }
+
     if (bootutil_buffer_is_erased(fap, magic, BOOT_MAGIC_SZ)) {
         state->magic = BOOT_MAGIC_UNSET;
     } else {
@@ -318,9 +372,6 @@ boot_write_magic(const struct flash_area *fap)
 
     off = boot_magic_off(fap);
 
-    BOOT_LOG_DBG("writing magic; fa_id=%d off=0x%lx (0x%lx)",
-                 fap->fa_id, (unsigned long)off,
-                 (unsigned long)(fap->fa_off + off));
     rc = flash_area_write(fap, off, boot_img_magic, BOOT_MAGIC_SZ);
     if (rc != 0) {
         return BOOT_EFLASH;
@@ -351,9 +402,17 @@ boot_write_trailer(const struct flash_area *fap, uint32_t off,
     erased_val = flash_area_erased_val(fap);
 
     memcpy(buf, inbuf, inlen);
-    memset(&buf[inlen], erased_val, align - inlen);
 
-    rc = flash_area_write(fap, off, buf, align);
+    if (align)
+    {
+        memset(&buf[inlen], erased_val, align - inlen);
+        rc = flash_area_write(fap, off, buf, align);
+    } else {
+        printf("Align == 0, skip write\n");
+        rc = 0;
+    }
+ 
+
     if (rc != 0) {
         return BOOT_EFLASH;
     }
@@ -431,18 +490,16 @@ boot_swap_type_multi(int image_index)
 
     for (i = 0; i < BOOT_SWAP_TABLES_COUNT; i++) {
         table = boot_swap_tables + i;
+        if (verbose)
+            printf("%s: table %ld\n", __FUNCTION__, i);
 
-        if (boot_magic_compatible_check(table->magic_primary_slot,
-                                        primary_slot.magic) &&
-            boot_magic_compatible_check(table->magic_secondary_slot,
-                                        secondary_slot.magic) &&
-            (table->image_ok_primary_slot == BOOT_FLAG_ANY   ||
-                table->image_ok_primary_slot == primary_slot.image_ok) &&
-            (table->image_ok_secondary_slot == BOOT_FLAG_ANY ||
-                table->image_ok_secondary_slot == secondary_slot.image_ok) &&
-            (table->copy_done_primary_slot == BOOT_FLAG_ANY  ||
-                table->copy_done_primary_slot == primary_slot.copy_done)) {
-            BOOT_LOG_INF("Swap type: %s",
+        if (boot_magic_compatible_check(table->magic_primary_slot, primary_slot.magic) &&
+            boot_magic_compatible_check(table->magic_secondary_slot, secondary_slot.magic) &&
+            (table->image_ok_primary_slot == BOOT_FLAG_ANY   || table->image_ok_primary_slot == primary_slot.image_ok) &&
+            (table->image_ok_secondary_slot == BOOT_FLAG_ANY || table->image_ok_secondary_slot == secondary_slot.image_ok) &&
+            (table->copy_done_primary_slot == BOOT_FLAG_ANY  || table->copy_done_primary_slot == primary_slot.copy_done)) {
+            if (verbose) 
+                printf("%s: Swap type: %s\n", __FUNCTION__,
                          table->swap_type == BOOT_SWAP_TYPE_TEST   ? "test"   :
                          table->swap_type == BOOT_SWAP_TYPE_PERM   ? "perm"   :
                          table->swap_type == BOOT_SWAP_TYPE_REVERT ? "revert" :
@@ -452,6 +509,13 @@ boot_swap_type_multi(int image_index)
                     table->swap_type != BOOT_SWAP_TYPE_REVERT) {
                 return BOOT_SWAP_TYPE_PANIC;
             }
+
+            if (verbose) 
+                printf("%s: Returning Swap type: %s\n", __FUNCTION__, 
+                         table->swap_type == BOOT_SWAP_TYPE_TEST   ? "test"   :
+                         table->swap_type == BOOT_SWAP_TYPE_PERM   ? "perm"   :
+                         table->swap_type == BOOT_SWAP_TYPE_REVERT ? "revert" :
+                         "BUG; can't happen");
             return table->swap_type;
         }
     }
@@ -471,7 +535,7 @@ boot_swap_type(void)
 }
 
 /**
- * Marks the image with the given index in the secondary slot as pending. On the
+ * Marks the image with the given index in the slot that booted as pending. On the
  * next reboot, the system will perform a one-time boot of the the secondary
  * slot image.
  *
@@ -488,23 +552,35 @@ int
 boot_set_pending_multi(int image_index, int permanent)
 {
     const struct flash_area *fap;
-    struct boot_swap_state state_secondary_slot;
+    struct boot_swap_state state_slot;
     uint8_t swap_type;
     int rc;
 
-    rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_index), &fap);
+    int slot =  boot_who_booted();
+    if (slot != PRIMARY_SLOT && slot != SECONDARY_SLOT)
+    {
+        printf("%s: Invalid slot\n", __FUNCTION__);
+        return BOOT_EBADVECT;
+    }
+
+    if (slot == PRIMARY_SLOT) {
+        rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index), &fap);
+    } else {
+        rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_index), &fap);
+    }
     if (rc != 0) {
         return BOOT_EFLASH;
     }
 
-    rc = boot_read_swap_state(fap, &state_secondary_slot);
+    rc = boot_read_swap_state(fap, &state_slot);
     if (rc != 0) {
         goto done;
     }
 
-    switch (state_secondary_slot.magic) {
+    switch (state_slot.magic) {
     case BOOT_MAGIC_GOOD:
         /* Swap already scheduled. */
+        printf("%s: MAGIC_GOOD: Secondary: Swap already scheduled!\n", __FUNCTION__);
         break;
 
     case BOOT_MAGIC_UNSET:
@@ -516,8 +592,10 @@ boot_set_pending_multi(int image_index, int permanent)
 
         if (rc == 0) {
             if (permanent) {
+                printf("%s: MAGIC_UNSET: Write Secondary magic, and swap_type: perm\n", __FUNCTION__);
                 swap_type = BOOT_SWAP_TYPE_PERM;
             } else {
+                printf("%s: MAGIC_UNSET: Write Secondary magic, and swap_type: test\n", __FUNCTION__);
                 swap_type = BOOT_SWAP_TYPE_TEST;
             }
             rc = boot_write_swap_info(fap, swap_type, 0);
@@ -529,11 +607,13 @@ boot_set_pending_multi(int image_index, int permanent)
         /* The image slot is corrupt.  There is no way to recover, so erase the
          * slot to allow future upgrades.
          */
+        printf("%s: MAGIC_BAD: The image slot is corrupt.\n", __FUNCTION__);
         flash_area_erase(fap, 0, fap->fa_size);
         rc = BOOT_EBADIMAGE;
         break;
 
     default:
+        printf("%s: MAGIC_UNKNOWN: The image slot is corrupt.\n", __FUNCTION__);
         assert(0);
         rc = BOOT_EBADIMAGE;
     }
@@ -544,7 +624,7 @@ done:
 }
 
 /**
- * Marks the image with index 0 in the secondary slot as pending. On the next
+ * Marks the image with index 0 in the slot that booted as pending. On the next
  * reboot, the system will perform a one-time boot of the the secondary slot
  * image. Note that this API is kept for compatibility. The
  * boot_set_pending_multi() API is recommended.
@@ -562,33 +642,65 @@ boot_set_pending(int permanent)
     return boot_set_pending_multi(0, permanent);
 }
 
-/**
- * Marks the image with the given index in the primary slot as confirmed.  The
- * system will continue booting into the image in the primary slot until told to
- * boot from a different slot.
- *
- * @param image_index       Image pair index.
- *
- * @return                  0 on success; nonzero on failure.
- */
+
+/* Set whoever booted or fallback to whichever has good magic  */
 int
 boot_set_confirmed_multi(int image_index)
 {
     const struct flash_area *fap = NULL;
-    struct boot_swap_state state_primary_slot;
-    int rc;
+    struct boot_swap_state state_slot;
+    int rc, i;
+    
+    int slot =  boot_who_booted();
 
-    rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index), &fap);
+    /* Handle special case of no image was booted.
+     * Will happen during bootstrapping when fresh image is 
+     * downloaded onto disk and we then need to confirm it
+     * (without an intermediate boot).
+     */
+    if (slot != PRIMARY_SLOT && slot != SECONDARY_SLOT)
+    {
+        for (i = PRIMARY_SLOT; i <= SECONDARY_SLOT; i++)
+        {
+            rc = flash_area_open(i, &fap);
+            assert(rc == 0);
+            rc = boot_read_swap_state(fap, &state_slot);
+            assert(rc == 0);
+            flash_area_close(fap);
+            if (state_slot.magic == BOOT_MAGIC_GOOD)
+            {
+                if (verbose)
+                    printf("%s: No previously booted image, Falling back to area %d\n", __FUNCTION__, i);
+                slot = i;
+                break;
+            }
+        }
+
+        /* Trying to confirm a booted slot but cannot find slot marked as booted
+         * and can't even find a slot with good magic.
+         */
+        if (slot == -1)
+        {
+            printf("%s: Cannot find bootable slot\n", __FUNCTION__);
+            return BOOT_EFLASH;
+        }
+    }
+
+    if (slot == PRIMARY_SLOT) {
+        rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY(image_index), &fap);
+    } else {
+        rc = flash_area_open(FLASH_AREA_IMAGE_SECONDARY(image_index), &fap);
+    }
     if (rc != 0) {
         return BOOT_EFLASH;
     }
 
-    rc = boot_read_swap_state(fap, &state_primary_slot);
+    rc = boot_read_swap_state(fap, &state_slot);
     if (rc != 0) {
         goto done;
     }
 
-    switch (state_primary_slot.magic) {
+    switch (state_slot.magic) {
     case BOOT_MAGIC_GOOD:
         /* Confirm needed; proceed. */
         break;
@@ -608,7 +720,7 @@ boot_set_confirmed_multi(int image_index)
      * interface.
      */
 
-    if (state_primary_slot.image_ok != BOOT_FLAG_UNSET) {
+    if (state_slot.image_ok != BOOT_FLAG_UNSET) {
         /* Already confirmed. */
         goto done;
     }
@@ -621,7 +733,7 @@ done:
 }
 
 /**
- * Marks the image with index 0 in the primary slot as confirmed.  The system
+ * Marks the image with index 0 in the slot that booted as confirmed.  The system
  * will continue booting into the image in the primary slot until told to boot
  * from a different slot.  Note that this API is kept for compatibility. The
  * boot_set_confirmed_multi() API is recommended.

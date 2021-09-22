@@ -300,10 +300,24 @@ boot_write_copy_done(const struct flash_area *fap)
     uint32_t off;
 
     off = boot_copy_done_off(fap);
-    BOOT_LOG_DBG("writing copy_done; fa_id=%d off=0x%lx (0x%lx)",
+    BOOT_LOG_DBG("%s: writing copy_done; fa_id=%d off=0x%lx, final addr 0x%lx",
+                __FUNCTION__,
                  fap->fa_id, (unsigned long)off,
                  (unsigned long)(fap->fa_off + off));
     return boot_write_trailer_flag(fap, off, BOOT_FLAG_SET);
+}
+
+int
+boot_write_copy_done_with_flag(const struct flash_area *fap, int flag)
+{
+    uint32_t off;
+
+    off = boot_copy_done_off(fap);
+    BOOT_LOG_DBG("%s: writing copy_done; fa_id=%d off=0x%lx, final addr 0x%lx",
+                __FUNCTION__,
+                 fap->fa_id, (unsigned long)off,
+                 (unsigned long)(fap->fa_off + off));
+    return boot_write_trailer_flag(fap, off, flag);
 }
 
 int

@@ -151,7 +151,7 @@ _Static_assert(BOOT_IMAGE_NUMBER > 0, "Invalid value for BOOT_IMAGE_NUMBER");
 #define BOOT_MAX_IMG_SECTORS       MCUBOOT_MAX_IMG_SECTORS
 
 #define BOOT_LOG_IMAGE_INFO(slot, hdr)                                    \
-    BOOT_LOG_INF("%-9s slot: version=%u.%u.%u+%u",                        \
+    BOOT_LOG_INF("  %-9s slot: version=%u.%u.%u+%u",                        \
                  ((slot) == BOOT_PRIMARY_SLOT) ? "Primary" : "Secondary", \
                  (hdr)->ih_ver.iv_major,                                  \
                  (hdr)->ih_ver.iv_minor,                                  \
@@ -244,6 +244,7 @@ int boot_read_swap_state_by_id(int flash_area_id,
 int boot_write_magic(const struct flash_area *fap);
 int boot_write_status(const struct boot_loader_state *state, struct boot_status *bs);
 int boot_write_copy_done(const struct flash_area *fap);
+int boot_write_copy_done_with_flag(const struct flash_area *fap, int flag);
 int boot_write_image_ok(const struct flash_area *fap);
 int boot_write_swap_info(const struct flash_area *fap, uint8_t swap_type,
                          uint8_t image_num);
