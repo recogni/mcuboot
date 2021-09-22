@@ -41,8 +41,6 @@
 #include "bootutil/enc_key.h"
 #endif
 
-#include <stdio.h>
-
 MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
 
 /* Currently only used by imgmgr */

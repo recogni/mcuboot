@@ -218,7 +218,7 @@ void main(void)
     BOOT_LOG_INF("      Zephyr kernel   : %s", KERNEL_VERSION_STRING);
     BOOT_LOG_INF("      Git branch      : %s", GIT_BRANCH);
     BOOT_LOG_INF("      Git commit hash : %s", GIT_COMMIT_HASH);
-    BOOT_LOG_INF("");
+    BOOT_LOG_INF("      Build Time      : %s  %s", __DATE__, __TIME__);
 
     os_heap_init();
 

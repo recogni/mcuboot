@@ -49,8 +49,6 @@
 
 #include "mcuboot_config/mcuboot_config.h"
 
-#include <stdio.h>
-
 MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
 
 static struct boot_loader_state boot_data;
@@ -360,7 +358,6 @@ boot_version_cmp(const struct image_version *ver1,
 }
 #endif
 
-
 /*
  * Check that there is a valid image in a slot
  *
@@ -474,7 +471,10 @@ boot_get_slot_usage(struct boot_loader_state *state,
             return rc;
         }
 
+
         /* Check headers in all slots */
+        BOOT_LOG_INF("");
+        BOOT_LOG_INF("Image Contents:");
         for (slot = 0; slot < BOOT_NUM_SLOTS; slot++) {
             hdr = boot_img_hdr(state, slot);
 
@@ -504,19 +504,19 @@ boot_get_slot_usage(struct boot_loader_state *state,
  */
 static char *boot_strs[] = {
 "Zero",
-"Set", //       1
-"Bad", //       2
-"Unset", //     3
-"Any", //       4 
+"Set",
+"Bad",
+"Unset",
+"Any",
 };
 
 static char *swap_strs[] = {
 "Zero",
-"None", //     1
-"Test", //     2
-"Perm", //     3
-"Revert", //   4
-"Fail", //     5
+"None",
+"Test",
+"Perm",
+"Revert",
+"Fail",
 };
 struct boot_swap_state myswap[2];
 
@@ -542,10 +542,10 @@ dump_swap(int area)
 
     rc = boot_read_swap_state_by_id(area, &state);
     if (!rc)
-        printf("%s  : magic: %s, swap_type: %s, copy_done: %s, image_ok: %s\n", area_strs[area],
+        BOOT_LOG_INF("%s  : magic: %s, swap_type: %s, copy_done: %s, image_ok: %s", area_strs[area],
             boot_strs[state.magic], swap_strs[state.swap_type], boot_strs[state.copy_done], boot_strs[state.image_ok]);
     else
-        printf("%s: Couldn't read area %d!\n", __FUNCTION__, area);
+        BOOT_LOG_INF("%s: Couldn't read area %d!", __FUNCTION__, area);
 }
 
 #define USE_VERSION
@@ -585,7 +585,7 @@ find_slot_with_highest_version(struct boot_loader_state *state,
 
     return candidate_slot;
 }
-#else /* Below is !USE_VERSION */
+#else
 static uint32_t
 find_slot_scorpio(struct boot_loader_state *state,
                               struct slot_usage_t slot_usage[])
@@ -593,7 +593,7 @@ find_slot_scorpio(struct boot_loader_state *state,
     int myslot;
     int score[2];
 
-    printf("Using SCORPIO algorithm to choose boot slot\n");
+    BOOT_LOG_INF("Using SCORPIO algorithm to choose boot slot\n");
     /* 
      * get swap states for each slot
      */
@@ -624,7 +624,7 @@ find_slot_scorpio(struct boot_loader_state *state,
         {
             if (verbose)
             {
-                printf("%s: Slot %d: magic: %s, swap_type %s, copy_done: %s, image_ok: %s\n", __FUNCTION__, myslot,
+                BOOT_LOG_INF("%s: Slot %d: magic: %s, swap_type %s, copy_done: %s, image_ok: %s", __FUNCTION__, myslot,
                     boot_strs[myswap[myslot].magic],
                     swap_strs[myswap[myslot].swap_type],
                     boot_strs[myswap[myslot].copy_done],
@@ -645,7 +645,7 @@ find_slot_scorpio(struct boot_loader_state *state,
      * No slot is available
      */
     if (!score[0] && !score[1]) {
-        printf("%s: Scorpio algo: No Slots available!!\n", __FUNCTION__);
+        BOOT_LOG_INF("%s: Scorpio algo: No Slots available!!\n", __FUNCTION__);
         return NO_ACTIVE_SLOT;
     }
 
@@ -662,7 +662,7 @@ find_slot_scorpio(struct boot_loader_state *state,
            (myswap[myslot].magic == BOOT_FLAG_SET) && 
            ((myswap[myslot].swap_type == BOOT_SWAP_TYPE_PERM) || (myswap[myslot].swap_type == BOOT_SWAP_TYPE_TEST)))
         {
-            printf("%s: Scorpio algo: SWAP Requested: Selecting %s slot to boot\n", __FUNCTION__, myslot == BOOT_SECONDARY_SLOT ? "SECONDARY" : "PRIMARY");
+            BOOT_LOG_INF("%s: Scorpio algo: SWAP Requested: Selecting %s slot to boot\n", __FUNCTION__, myslot == BOOT_SECONDARY_SLOT ? "SECONDARY" : "PRIMARY");
             return(myslot);
         }
     }
@@ -670,7 +670,7 @@ find_slot_scorpio(struct boot_loader_state *state,
     /*
      * Still here? Return highest score
      */
-    printf("%s: Scorpio algo: High Score: Selecting %s slot to boot\n", __FUNCTION__, myslot == BOOT_SECONDARY_SLOT ? "SECONDARY" : "PRIMARY");
+    BOOT_LOG_INF("%s: Scorpio algo: High Score: Selecting %s slot to boot\n", __FUNCTION__, myslot == BOOT_SECONDARY_SLOT ? "SECONDARY" : "PRIMARY");
     return score[0] > score[1] ? 0 : 1; 
 
 }
@@ -703,7 +703,6 @@ print_loaded_images(struct boot_loader_state *state,
 }
 #endif
 
-//#ifdef MCUBOOT_DIRECT_XIP_REVERT
 /**
  * Checks whether the active slot of the current image was previously selected
  * to run. Erases the image if it was selected but its execution failed,
@@ -751,23 +750,25 @@ boot_select_or_erase(struct boot_loader_state *state,
          * runtime or its trailer is corrupted/invalid. Erase the image
          * to prevent it from being selected again on the next reboot.
          */ 
-        printf("*\n* %s Slot booted with no confirmation or is corrupt.\n", active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
-        printf("* ERASING %s\n*\n", active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
-            rc = flash_area_erase(fap, 0, fap->fa_size);
-            assert(rc == 0);
-            rc = -1;
-
+        BOOT_LOG_INF("");
+        BOOT_LOG_INF("*");
+        BOOT_LOG_INF("* WARNING: %s Slot booted with no confirmation or is corrupt.", active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+        BOOT_LOG_INF("* WARNING: ERASING %s Image.", active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
+        BOOT_LOG_INF("*");
+        BOOT_LOG_INF("");
+        rc = flash_area_erase(fap, 0, fap->fa_size);
+        assert(rc == 0);
+        rc = -1;
         flash_area_close(fap);
-
     } else {
         if (active_swap_state->copy_done != BOOT_FLAG_SET) {
             if (verbose)
             {
-                printf("%s: Set copy_done in active slot.\n", __FUNCTION__);
+                BOOT_LOG_INF("%s: Set copy_done in active slot.", __FUNCTION__);
             }
             if (active_swap_state->copy_done == BOOT_FLAG_BAD) {
-                printf("FYI: The copy_done flag had an unexpected value. Its "
-                             "value was neither 'set' nor 'unset', but 'bad'.\n");
+                BOOT_LOG_INF("FYI: The copy_done flag had an unexpected value. Its "
+                             "value was neither 'set' nor 'unset', but 'bad'.");
             }
             /*
              * Set the copy_done flag, indicating that the image has been
@@ -777,15 +778,14 @@ boot_select_or_erase(struct boot_loader_state *state,
              */
             rc = boot_write_copy_done(fap);
             if (rc != 0) {
-                printf("Failed to set copy_done flag\n");
+                BOOT_LOG_INF("Failed to set copy_done flag");
                 rc = 0;
             }
         }
         flash_area_close(fap);
 
-        /* XXX Need to clear copy_done on the other slot! */
-        /* Once we can do this, mcuboot_shell can detemrine which slot was booted, so when we confirm, teach it
-         * to confirm whichever slot was booted.
+        /*
+         * Clear copy_done on the other/nonbooting slot.
          */
         {
             int passive_slot = BOOT_SECONDARY_SLOT - active_slot;
@@ -794,7 +794,7 @@ boot_select_or_erase(struct boot_loader_state *state,
             if (slot_usage[BOOT_CURR_IMG(state)].slot_available[passive_slot])
             {
                 if (verbose)
-                    printf("%s, Booted from %s, clear copy_done on other slot %s\n",
+                    BOOT_LOG_INF("%s, Booted from %s, clear copy_done on other slot %s",
                         __FUNCTION__,
                         active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary",
                         passive_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
@@ -806,7 +806,7 @@ boot_select_or_erase(struct boot_loader_state *state,
                 flash_area_close(fap);
             } else {
                 if (verbose)
-                    printf("%s: Other slot (%s) doesn't exist, no copy_done to clear.\n",
+                    BOOT_LOG_INF("%s: Other slot (%s) doesn't exist, no copy_done to clear.",
                         __FUNCTION__, passive_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
             }
         }
@@ -814,7 +814,6 @@ boot_select_or_erase(struct boot_loader_state *state,
 
     return rc;
 }
-//#endif /* MCUBOOT_DIRECT_XIP_REVERT */
 
 
 #ifndef MULTIPLE_EXECUTABLE_RAM_REGIONS
@@ -908,9 +907,8 @@ boot_copy_image_to_sram(struct boot_loader_state *state, int slot,
 
 #ifdef CONFIG_SCORPIO_BOOTLOADER
     /* Direct copy from flash to its new location in SRAM. */
+    BOOT_LOG_INF("");
     BOOT_LOG_INF("Copying image from %s slot into LPDDR", slot ? "SECONDARY" : "PRIMARY");
-    //BOOT_LOG_INF("  image size  = %d", img_sz);
-    //BOOT_LOG_INF("  destination = 0x%llx", img_dst);
     
     int local_offset = 0;
     while (img_sz > 0) {
@@ -1090,7 +1088,6 @@ boot_load_and_validate_images(struct boot_loader_state *state,
 #endif
 
             if (active_slot == NO_ACTIVE_SLOT) {
-                printf("%s: No good slot\n", __FUNCTION__);
                 BOOT_LOG_INF("No slot to load for image %d",
                              BOOT_CURR_IMG(state));
                 FIH_RET(FIH_FAILURE);
@@ -1103,7 +1100,7 @@ boot_load_and_validate_images(struct boot_loader_state *state,
 
             if (verbose)
             {
-                printf("%s: Set Active slot %d/%s\n",
+                BOOT_LOG_INF("%s: Set Active slot %d/%s",
                     __FUNCTION__, active_slot, active_slot == BOOT_PRIMARY_SLOT ? "Primary" : "Secondary");
             }
 
@@ -1140,7 +1137,6 @@ boot_load_and_validate_images(struct boot_loader_state *state,
             if (rc != 0 ) {
                 /* Image cannot be ramloaded. */
                 BOOT_LOG_ERR("%s: Image cannot be ramloaded!", __FUNCTION__);
-                printf("%s: Image cannot be ramloaded!\n\n", __FUNCTION__);
                 boot_remove_image_from_flash(state, active_slot);
                 slot_usage[BOOT_CURR_IMG(state)].slot_available[active_slot] = false;
                 slot_usage[BOOT_CURR_IMG(state)].active_slot = NO_ACTIVE_SLOT;
@@ -1165,9 +1161,6 @@ boot_load_and_validate_images(struct boot_loader_state *state,
     FIH_RET(FIH_SUCCESS);
 }
 
-/********************************************************************* 
- * SCORPIO: We run a single (combined) image (BOOT_IMAGE_NUMBER == 1) 
- *********************************************************************/
 fih_int
 context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
 {

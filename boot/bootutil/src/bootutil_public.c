@@ -654,6 +654,12 @@ boot_set_confirmed_multi(int image_index)
     int rc, i;
     
     int slot =  boot_who_booted();
+
+    /* Handle special case of no image was booted.
+     * Will happen during bootstrapping when fresh image is 
+     * downloaded onto disk and we then need to confirm it
+     * (without an intermediate boot).
+     */
     if (slot != PRIMARY_SLOT && slot != SECONDARY_SLOT)
     {
         for (i = PRIMARY_SLOT; i <= SECONDARY_SLOT; i++)
