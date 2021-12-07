@@ -226,6 +226,10 @@ void main(void)
 
     (void)rc;
 
+    // Give developers a chance to intercept firmware loading.
+    poll_for_custom_firmware_load(5); // 5 seconds
+
+    // Copy flash area etc.
     FIH_CALL(boot_go, fih_rc, &rsp);
     if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
         BOOT_LOG_ERR("Unable to find bootable image, issue halt for user debug ...");
@@ -237,10 +241,9 @@ void main(void)
             ;
     }
 
-    poll_for_custom_firmware_load(5); // 5 seconds
-
     ZEPHYR_BOOT_LOG_STOP();
 
+    // Execute jump to executable code.
     do_boot(&rsp);
 
     while (1)
