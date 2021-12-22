@@ -38,6 +38,8 @@
 #include "bootutil/fault_injection_hardening.h"
 #include "flash_map_backend/flash_map_backend.h"
 
+#include "hal/lpddr.h"
+
 /* CONFIG_LOG_MINIMAL is the legacy Kconfig property,
  * replaced by CONFIG_LOG_MODE_MINIMAL.
  */
@@ -225,6 +227,21 @@ void main(void)
     ZEPHYR_BOOT_LOG_START();
 
     (void)rc;
+
+    if (!lpddr_is_ready())
+    {
+        BOOT_LOG_ERR("");
+        BOOT_LOG_ERR("*****************************************");
+        BOOT_LOG_ERR("FATAL ERROR: LPDDR failed to initialize! ");
+        BOOT_LOG_ERR("*****************************************");
+        BOOT_LOG_ERR("");
+
+        // Issue a debug break to allow loading f/w
+        __asm__ volatile ("ebreak");
+
+        while (1)
+            ;
+    }
 
     // Give developers a chance to intercept firmware loading.
     poll_for_custom_firmware_load(5); // 5 seconds
