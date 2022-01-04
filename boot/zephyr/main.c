@@ -221,6 +221,7 @@ void main(void)
     BOOT_LOG_INF("      Git branch      : %s", GIT_BRANCH);
     BOOT_LOG_INF("      Git commit hash : %s", GIT_COMMIT_HASH);
     BOOT_LOG_INF("      Build Time      : %s  %s", __DATE__, __TIME__);
+    BOOT_LOG_INF("      Scorpio version : %s", scorpio_version_string());
 
     os_heap_init();
 
