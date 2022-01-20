@@ -576,12 +576,15 @@ find_slot_with_highest_version(struct boot_loader_state *state,
         }
     }
 
-    BOOT_LOG_INF("Highest version (%u.%u.%u+%u) is in %s slot",
-        boot_img_hdr(state, candidate_slot)->ih_ver.iv_major,
-        boot_img_hdr(state, candidate_slot)->ih_ver.iv_minor,
-        boot_img_hdr(state, candidate_slot)->ih_ver.iv_revision,
-        boot_img_hdr(state, candidate_slot)->ih_ver.iv_build_num,
-        (candidate_slot == BOOT_PRIMARY_SLOT) ? "PRIMARY" : "SECONDARY");
+    if (candidate_slot != NO_ACTIVE_SLOT)
+    {
+        BOOT_LOG_INF("Highest version (%u.%u.%u+%u) is in %s slot",
+            boot_img_hdr(state, candidate_slot)->ih_ver.iv_major,
+            boot_img_hdr(state, candidate_slot)->ih_ver.iv_minor,
+            boot_img_hdr(state, candidate_slot)->ih_ver.iv_revision,
+            boot_img_hdr(state, candidate_slot)->ih_ver.iv_build_num,
+            (candidate_slot == BOOT_PRIMARY_SLOT) ? "PRIMARY" : "SECONDARY");
+    }
 
     return candidate_slot;
 }
