@@ -566,9 +566,10 @@ find_slot_with_highest_version(struct boot_loader_state *state,
                 rc = boot_version_cmp(
                             &boot_img_hdr(state, slot)->ih_ver,
                             &boot_img_hdr(state, candidate_slot)->ih_ver);
-                if (rc == 1) {
-                    /* The version of the image being examined is greater than
+                if (rc >= 0) {
+                    /* The version of the image being examined is greater or equal than
                      * the version of the current candidate.
+                     * If both are equal, choose the secondary slot.
                      */
                     candidate_slot = slot;
                 }
