@@ -27,6 +27,7 @@
 #include <drivers/timer/system_timer.h>
 #include <linker/linker-defs.h>
 #include <drivers/uart.h>
+#include <ctype.h>
 
 #include <soc.h>
 
@@ -178,29 +179,40 @@ void zephyr_boot_log_stop(void)
 #define GIT_COMMIT_HASH "?"
 #endif
 
-void poll_for_custom_firmware_load(int timeout_seconds)
+
+/*
+ * Press G or g to halt before copying image.
+ * Press D or d to halt after copying image.
+ */
+char poll_for_custom_firmware_load(int timeout_seconds)
 {
     const struct device *uart_dev = device_get_binding("UART_0");
     
     char user_input = 0;
     while (timeout_seconds > 0)
     {
-        BOOT_LOG_INF(" Hit the `G` key in %d seconds to prevent firmware load ...", timeout_seconds--);
+        BOOT_LOG_INF(" Hit G to stop before FW load, D to stop after, in %d seconds ...", timeout_seconds--);
         
         if (uart_poll_in(uart_dev, &user_input) != -1)
         {
-            if (user_input == 'g' || user_input == 'G')
+            user_input = tolower(user_input);
+            if (user_input == 'g' || user_input == 'd')
             {
-                BOOT_LOG_INF(" Firmware load stopped ...");
-                ZEPHYR_BOOT_LOG_STOP();
-
-                __asm__ volatile ("ebreak");
-                while (1)
-                    ;
+                return user_input;
             }
         }
         k_msleep(1000);
     }
+    return 0;
+}
+
+static void halt()
+{
+    ZEPHYR_BOOT_LOG_STOP();
+
+    __asm__ volatile ("ebreak");
+    while (1)
+        ;
 }
 
 void main(void)
@@ -208,6 +220,7 @@ void main(void)
     struct boot_rsp rsp;
     int rc;
     fih_int fih_rc = FIH_FAILURE;
+    char user_input;
 
     MCUBOOT_WATCHDOG_FEED();
     BOOT_LOG_INF("     _____                       _          __                    __          ");
@@ -236,27 +249,36 @@ void main(void)
         BOOT_LOG_ERR("FATAL ERROR: LPDDR failed to initialize! ");
         BOOT_LOG_ERR("*****************************************");
         BOOT_LOG_ERR("");
-
-        // Issue a debug break to allow loading f/w
-        __asm__ volatile ("ebreak");
-
-        while (1)
-            ;
+        halt();
     }
 
     // Give developers a chance to intercept firmware loading.
-    poll_for_custom_firmware_load(5); // 5 seconds
+    user_input = poll_for_custom_firmware_load(5); // 5 seconds
+
+    switch (user_input)
+    {
+        case 'g':
+            /* Halt before loading */
+            BOOT_LOG_INF(" Firmware load stopped ...");
+            halt();
+            break;
+        case 'd':
+            /* Print message now and halt after loading */
+            BOOT_LOG_INF(" Processor will halt after loading FW is complete.");
+            break;
+    }
 
     // Copy flash area etc.
     FIH_CALL(boot_go, fih_rc, &rsp);
     if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
         BOOT_LOG_ERR("Unable to find bootable image, issue halt for user debug ...");
-        
-        // Issue a debug break to allow loading f/w
-        __asm__ volatile ("ebreak");
-        
-        while (1)
-            ;
+        halt();
+    }
+
+    if (user_input == 'd')
+    {
+            BOOT_LOG_INF("Boot image loaded, halting now.");
+            halt();
     }
 
     ZEPHYR_BOOT_LOG_STOP();
