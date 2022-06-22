@@ -907,7 +907,7 @@ boot_copy_image_to_sram(struct boot_loader_state *state, int slot,
 #ifdef CONFIG_SCORPIO_BOOTLOADER
     /* Direct copy from flash to its new location in SRAM. */
     BOOT_LOG_INF("");
-    BOOT_LOG_INF("Copying image from %s slot into LPDDR", slot ? "SECONDARY" : "PRIMARY");
+    BOOT_LOG_INF("Copying image from %s slot into LPDDR (%u bytes @ 0x%llx)", slot ? "SECONDARY" : "PRIMARY", img_sz, img_dst);
     
     rc = flash_area_read(fap_src, 0, (void *)img_dst, img_sz);
     if (rc != 0) {
