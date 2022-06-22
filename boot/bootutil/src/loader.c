@@ -376,6 +376,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
     fih_int fih_rc = FIH_FAILURE;
     int rc;
 
+    BOOT_LOG_INF("Validating image...");
     area_id = flash_area_id_from_multi_image_slot(BOOT_CURR_IMG(state), slot);
     rc = flash_area_open(area_id, &fap);
     if (rc != 0) {
@@ -903,26 +904,16 @@ boot_copy_image_to_sram(struct boot_loader_state *state, int slot,
         return BOOT_EFLASH;
     }
 
-    /*
-     * Scorpio flash driver only handles a single sector at a time.
-     * TODO: Let scorpio handle infinite length.
-     */
-#define SCORP_SECTOR_SZ 512
-
 #ifdef CONFIG_SCORPIO_BOOTLOADER
     /* Direct copy from flash to its new location in SRAM. */
     BOOT_LOG_INF("");
     BOOT_LOG_INF("Copying image from %s slot into LPDDR", slot ? "SECONDARY" : "PRIMARY");
     
-    int local_offset = 0;
-    while (img_sz > 0) {
-        int sz = MIN(SCORP_SECTOR_SZ, img_sz);
-        rc = flash_area_read(fap_src, local_offset, (void *)(uint64_t)(img_dst + local_offset), sz);
-        if (rc != 0) {
-            BOOT_LOG_INF("Error whilst copying image from Flash to SRAM: %d", rc);
-        }
-        img_sz -= sz;
-        local_offset += sz;
+    rc = flash_area_read(fap_src, 0, (void *)img_dst, img_sz);
+    if (rc != 0) {
+        BOOT_LOG_ERR("#######################################");
+        BOOT_LOG_ERR("Error copying image from flash to SRAM!");
+        BOOT_LOG_ERR("#######################################");
     }
 #endif // CONFIG_SCORPIO_BOOTLOADER
 
