@@ -454,31 +454,9 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
                 goto out;
             }
 
-            /*
-             * Recogni: This TLV (len == 256, crosses flash sectors and flash drivers
-             * asserts.  Need to break this into two reads.
-             */
-#define SCORPIO_BLOCK_SIZE 512
-            int block_off = off % SCORPIO_BLOCK_SIZE;
-
-            /* Single read fits into a single 512 byte
-             * scorpio virt_flash buffer? */
-            if (block_off + len <  SCORPIO_BLOCK_SIZE) {
-                rc = LOAD_IMAGE_DATA(hdr, fap, off, buf, len);
-                if (rc) {
-                    goto out;
-                }
-            } else {
-                /* Won't fit, need to break it into two reads */
-                int partial = SCORPIO_BLOCK_SIZE - block_off;
-                rc = LOAD_IMAGE_DATA(hdr, fap, off, buf, partial);
-                if (rc) {
-                    goto out;
-                }
-                rc = LOAD_IMAGE_DATA(hdr, fap, off+partial, buf+partial, len - partial);
-                if (rc) {
-                    goto out;
-                }
+            rc = LOAD_IMAGE_DATA(hdr, fap, off, buf, len);
+            if (rc) {
+                goto out;
             }
 
             FIH_CALL(bootutil_verify_sig, valid_signature, hash, sizeof(hash),
