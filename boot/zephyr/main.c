@@ -191,11 +191,10 @@ const char poll_for_custom_firmware_load(int timeout_seconds)
     const struct device *uart_dev = device_get_binding("UART_0");
     
     BOOT_LOG_INF("Recogni bootloader options:");
-    BOOT_LOG_INF("  G - Stop before Firmware load.");
-    BOOT_LOG_INF("  D - Stop after Firmware load.");
-    BOOT_LOG_INF("  A - Boot slot A.");
-    BOOT_LOG_INF("  B - Boot slot B.");
-    BOOT_LOG_INF("  I - Boot immediately.");
+    BOOT_LOG_INF("  G     - Stop before Firmware load.");
+    BOOT_LOG_INF("  D     - Stop after Firmware load.");
+    BOOT_LOG_INF("  I     - Boot immediately.");
+    BOOT_LOG_INF(" <0..9> - Boot slot <N>.");
     BOOT_LOG_INF("================================");
 
     char user_input = 0;
@@ -209,7 +208,7 @@ const char poll_for_custom_firmware_load(int timeout_seconds)
             if (uart_poll_in(uart_dev, &user_input) != -1)
             {
                 user_input = tolower(user_input);
-                if (strchr("abdgi", user_input) != NULL)
+                if (strchr("gdi0123456789", user_input) != NULL)
                 {
                     return user_input;
                 }
@@ -285,10 +284,9 @@ void main(void)
             /* Boot immediately */
             BOOT_LOG_INF(" Booting firmware immediately.");
             break;
-        case 'a':
-        case 'b':
-            /* Boot a specific slot */
-            force_boot_slot = user_input - (int)'a';
+        case '0' ... '9':
+            /* Boot a specific slot, 0 based upto slot '9' */
+            force_boot_slot = user_input - (int)'0';
             BOOT_LOG_INF(" Booting firmware from slot %d.", force_boot_slot);
             break;
     }
