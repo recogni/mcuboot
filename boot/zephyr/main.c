@@ -179,30 +179,44 @@ void zephyr_boot_log_stop(void)
 #define GIT_COMMIT_HASH "?"
 #endif
 
+#define UART_POLL_INTERVAL_MS 100
+BUILD_ASSERT(1000 % UART_POLL_INTERVAL_MS == 0, "Divides a second evenly");
 
 /*
  * Press G or g to halt before copying image.
  * Press D or d to halt after copying image.
  */
-char poll_for_custom_firmware_load(int timeout_seconds)
+const char poll_for_custom_firmware_load(int timeout_seconds)
 {
     const struct device *uart_dev = device_get_binding("UART_0");
     
+    BOOT_LOG_INF("Recogni bootloader options:");
+    BOOT_LOG_INF("  G - Stop before Firmware load.");
+    BOOT_LOG_INF("  D - Stop after Firmware load.");
+    BOOT_LOG_INF("  A - Boot slot A.");
+    BOOT_LOG_INF("  B - Boot slot B.");
+    BOOT_LOG_INF("  I - Boot immediately.");
+    BOOT_LOG_INF("================================");
+
     char user_input = 0;
-    while (timeout_seconds > 0)
+    do
     {
-        BOOT_LOG_INF(" Hit G to stop before FW load, D to stop after, in %d seconds ...", timeout_seconds--);
-        
-        if (uart_poll_in(uart_dev, &user_input) != -1)
+        BOOT_LOG_INF(" Firmware booting in %d seconds ...", timeout_seconds--);
+        for (int t = 0; t < 1000 / UART_POLL_INTERVAL_MS; ++t)
         {
-            user_input = tolower(user_input);
-            if (user_input == 'g' || user_input == 'd')
+            k_msleep(UART_POLL_INTERVAL_MS);
+            
+            if (uart_poll_in(uart_dev, &user_input) != -1)
             {
-                return user_input;
+                user_input = tolower(user_input);
+                if (strchr("abdgi", user_input) != NULL)
+                {
+                    return user_input;
+                }
             }
         }
-        k_msleep(1000);
-    }
+    } while (timeout_seconds > 0);
+
     return 0;
 }
 
@@ -219,6 +233,7 @@ void main(void)
 {
     struct boot_rsp rsp;
     int rc;
+    int force_boot_slot = -1;
     fih_int fih_rc = FIH_FAILURE;
     char user_input;
 
@@ -266,10 +281,20 @@ void main(void)
             /* Print message now and halt after loading */
             BOOT_LOG_INF(" Processor will halt after loading FW is complete.");
             break;
+        case 'i':
+            /* Boot immediately */
+            BOOT_LOG_INF(" Booting firmware immediately.");
+            break;
+        case 'a':
+        case 'b':
+            /* Boot a specific slot */
+            force_boot_slot = user_input - (int)'a';
+            BOOT_LOG_INF(" Booting firmware from slot %d.", force_boot_slot);
+            break;
     }
 
     // Copy flash area etc.
-    FIH_CALL(boot_go, fih_rc, &rsp);
+    FIH_CALL(boot_go, fih_rc, force_boot_slot, &rsp);
     if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
         BOOT_LOG_ERR("Unable to find bootable image, issue halt for user debug ...");
         halt();
@@ -277,8 +302,8 @@ void main(void)
 
     if (user_input == 'd')
     {
-            BOOT_LOG_INF("Boot image loaded, halting now.");
-            halt();
+        BOOT_LOG_INF("Boot image loaded, halting now.");
+        halt();
     }
 
     ZEPHYR_BOOT_LOG_STOP();

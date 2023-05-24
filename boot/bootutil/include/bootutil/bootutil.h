@@ -37,7 +37,7 @@ extern "C" {
 #endif
 
 struct image_header;
-/**
+/*
  * A response object provided by the boot loader code; indicates where to jump
  * to execute the main image.
  */
@@ -53,7 +53,8 @@ struct boot_rsp {
     uint32_t br_image_off;
 };
 
-/* This is not actually used by mcuboot's code but can be used by apps
+/*
+ * This is not actually used by mcuboot's code but can be used by apps
  * when attempting to read/write a trailer.
  */
 struct image_trailer {
@@ -67,10 +68,10 @@ struct image_trailer {
 };
 
 /* you must have pre-allocated all the entries within this structure */
-fih_int boot_go(struct boot_rsp *rsp);
+fih_int boot_go(const int force_boot_slot, struct boot_rsp *rsp);
 
 struct boot_loader_state;
-fih_int context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp);
+fih_int context_boot_go(const int force_boot_slot, struct boot_loader_state *state, struct boot_rsp *rsp);
 
 #define SPLIT_GO_OK                 (0)
 #define SPLIT_GO_NON_MATCHING       (-1)

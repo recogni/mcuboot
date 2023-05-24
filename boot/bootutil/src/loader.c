@@ -441,14 +441,16 @@ out:
 /**
  * Opens all flash areas and checks which contain an image with a valid header.
  *
- * @param  state        Boot loader status information.
- * @param  slot_usage   Structure to fill with information about the available
- *                      slots.
+ * @param  force_boot_slot  Force a specific slot to boot from (-1 is default).
+ * @param  state            Boot loader status information.
+ * @param  slot_usage       Structure to fill with information about the 
+ *                          available slots.
  *
  * @return              0 on success; nonzero on failure.
  */
 static int
-boot_get_slot_usage(struct boot_loader_state *state,
+boot_get_slot_usage(const int force_boot_slot,
+                    struct boot_loader_state *state,
                     struct slot_usage_t slot_usage[])
 {
     uint32_t slot;
@@ -480,7 +482,8 @@ boot_get_slot_usage(struct boot_loader_state *state,
             hdr = boot_img_hdr(state, slot);
 
             if (boot_is_header_valid(hdr, BOOT_IMG_AREA(state, slot))) {
-                slot_usage[BOOT_CURR_IMG(state)].slot_available[slot] = true;
+                const bool is_target_slot = (force_boot_slot == -1) || (force_boot_slot == slot);
+                slot_usage[BOOT_CURR_IMG(state)].slot_available[slot] = is_target_slot;
                 BOOT_LOG_IMAGE_INFO(slot, hdr);
             } else {
                 slot_usage[BOOT_CURR_IMG(state)].slot_available[slot] = false;
@@ -1157,7 +1160,7 @@ boot_load_and_validate_images(struct boot_loader_state *state,
 }
 
 fih_int
-context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
+context_boot_go(const int force_boot_slot, struct boot_loader_state *state, struct boot_rsp *rsp)
 {
     struct slot_usage_t slot_usage[BOOT_IMAGE_NUMBER];
     int rc;
@@ -1171,7 +1174,7 @@ context_boot_go(struct boot_loader_state *state, struct boot_rsp *rsp)
         slot_usage[BOOT_CURR_IMG(state)].slot_available[slot] = true;   //updates slot_aval
         slot_usage[BOOT_CURR_IMG(state)].active_slot = NO_ACTIVE_SLOT;  //Haven't picked active yet...
      */
-    rc = boot_get_slot_usage(state, slot_usage);
+    rc = boot_get_slot_usage(force_boot_slot, state, slot_usage);
     if (rc != 0) {
         goto out;
     }
@@ -1203,16 +1206,19 @@ out:
 
 /**
  * Prepares the booting process. This function moves images around in flash as
- * appropriate, and tells you what address to boot from.
+ * appropriate, and tells you what address to boot from. Optionally we can 
+ * boot from a specific requested slot, if this is set to the default of -1
+ * then the default operation of finding the highest version slot is used.
  *
+ * @param force_boot_slot       Force booting from a specific slot index. 
  * @param rsp                   On success, indicates how booting should occur.
  *
  * @return                      FIH_SUCCESS on success; nonzero on failure.
  */
 fih_int
-boot_go(struct boot_rsp *rsp)
+boot_go(const int force_boot_slot, struct boot_rsp *rsp)
 {
     fih_int fih_rc = FIH_FAILURE;
-    FIH_CALL(context_boot_go, fih_rc, &boot_data, rsp);
+    FIH_CALL(context_boot_go, fih_rc, force_boot_slot, &boot_data, rsp);
     FIH_RET(fih_rc);
 }
