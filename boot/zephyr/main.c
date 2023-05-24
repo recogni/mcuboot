@@ -204,6 +204,8 @@ const char poll_for_custom_firmware_load(int timeout_seconds)
         BOOT_LOG_INF(" Firmware booting in %d seconds ...", timeout_seconds--);
         for (int t = 0; t < 1000 / UART_POLL_INTERVAL_MS; ++t)
         {
+            k_msleep(UART_POLL_INTERVAL_MS);
+            
             if (uart_poll_in(uart_dev, &user_input) != -1)
             {
                 user_input = tolower(user_input);
