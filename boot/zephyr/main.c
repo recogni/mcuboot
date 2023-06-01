@@ -21,7 +21,6 @@
 #include <kernel.h>
 #include <version.h>
 
-#include <drivers/gpio.h>
 #include <sys/__assert.h>
 #include <drivers/flash.h>
 #include <drivers/timer/system_timer.h>
@@ -39,6 +38,7 @@
 #include "bootutil/fault_injection_hardening.h"
 #include "flash_map_backend/flash_map_backend.h"
 
+#include "hal/gpio.h"
 #include "hal/lpddr.h"
 
 /* CONFIG_LOG_MINIMAL is the legacy Kconfig property,
@@ -189,13 +189,16 @@ BUILD_ASSERT(1000 % UART_POLL_INTERVAL_MS == 0, "Divides a second evenly");
 const char poll_for_custom_firmware_load(int timeout_seconds)
 {
     const struct device *uart_dev = device_get_binding("UART_0");
-    
-    BOOT_LOG_INF("Recogni bootloader options:");
-    BOOT_LOG_INF("  G     - Stop before Firmware load.");
-    BOOT_LOG_INF("  D     - Stop after Firmware load.");
-    BOOT_LOG_INF("  I     - Boot immediately.");
-    BOOT_LOG_INF(" <0..9> - Boot slot <N>.");
-    BOOT_LOG_INF("================================");
+
+    if (timeout_seconds > 0)
+    {
+        BOOT_LOG_INF("Recogni bootloader options:");
+        BOOT_LOG_INF("  G     - Stop before Firmware load.");
+        BOOT_LOG_INF("  D     - Stop after Firmware load.");
+        BOOT_LOG_INF("  I     - Boot immediately.");
+        BOOT_LOG_INF(" <0..9> - Boot slot <N>.");
+        BOOT_LOG_INF("================================");
+    }
 
     char user_input = 0;
     do
@@ -203,8 +206,6 @@ const char poll_for_custom_firmware_load(int timeout_seconds)
         BOOT_LOG_INF(" Firmware booting in %d seconds ...", timeout_seconds--);
         for (int t = 0; t < 1000 / UART_POLL_INTERVAL_MS; ++t)
         {
-            k_msleep(UART_POLL_INTERVAL_MS);
-            
             if (uart_poll_in(uart_dev, &user_input) != -1)
             {
                 user_input = tolower(user_input);
@@ -213,6 +214,13 @@ const char poll_for_custom_firmware_load(int timeout_seconds)
                     return user_input;
                 }
             }
+
+            if (timeout_seconds < 0)
+            {
+                break;
+            }
+
+            k_msleep(UART_POLL_INTERVAL_MS);
         }
     } while (timeout_seconds > 0);
 
@@ -267,7 +275,8 @@ void main(void)
     }
 
     // Give developers a chance to intercept firmware loading.
-    user_input = poll_for_custom_firmware_load(5); // 5 seconds
+    user_input =
+        poll_for_custom_firmware_load((scorpio_gpio_detect_board() & SCORPIO_BOARD_PEGASUS) ? 0 : 5);    // N seconds
 
     switch (user_input)
     {
