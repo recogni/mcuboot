@@ -276,7 +276,7 @@ void main(void)
 
     // Give developers a chance to intercept firmware loading.
     user_input =
-        poll_for_custom_firmware_load((scorpio_gpio_detect_board() & SCORPIO_BOARD_PEGASUS) ? 0 : 5);    // N seconds
+        poll_for_custom_firmware_load((scorpio_gpio_detect_board() & SCORPIO_BOARD_PEGASUS_KIND) ? 0 : 5);    // N seconds
 
     switch (user_input)
     {
