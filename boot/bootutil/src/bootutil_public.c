@@ -282,14 +282,6 @@ boot_who_booted()
     }
     flash_area_close(fap);
 
-    /* Check flags */
-    if ((p_swap == BOOT_FLAG_BAD) && (s_swap == BOOT_FLAG_BAD)) {
-        printf("Nobody booted??? WTF\n");
-    }
-    if ((p_swap == BOOT_FLAG_SET) && (s_swap == BOOT_FLAG_SET)) {
-        printf("Both booted??? WTF\n");
-    }
-
     if (p_swap == BOOT_FLAG_SET) {
         return PRIMARY_SLOT;
     }
