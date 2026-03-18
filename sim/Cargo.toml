@@ -40,7 +40,7 @@ log = "0.4"
 env_logger = "0.7"
 simflash = { path = "simflash" }
 mcuboot-sys = { path = "mcuboot-sys" }
-ring = "0.16.11"
+ring = "0.17.13"
 untrusted = "0.7"
 pem = "0.8"
 aes-ctr = "0.4.0"
